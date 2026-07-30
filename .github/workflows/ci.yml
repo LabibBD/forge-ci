@@ -295,6 +295,160 @@ jobs:
           )
           PYVERIFY
 
+      - name: Verify multidimensional robustness envelope
+        run: |
+          forgeci discover-envelope \
+            configs/mujoco_multidimensional_envelope.yaml \
+            --output-dir runs/ci-multidimensional-envelope
+
+          envelope_run=$(
+            find runs/ci-multidimensional-envelope \
+              -mindepth 1 \
+              -maxdepth 1 \
+              -type d |
+            sort |
+            tail -n 1
+          )
+
+          test -n "$envelope_run"
+
+          python - "$envelope_run" <<'PYVERIFY'
+          import json
+          import sys
+          from pathlib import Path
+
+          run_dir = Path(sys.argv[1])
+
+          summary_path = (
+              run_dir / "envelope_summary.json"
+          )
+
+          csv_path = (
+              run_dir / "robustness_envelope.csv"
+          )
+
+          assert summary_path.exists()
+          assert csv_path.exists()
+
+          summary = json.loads(
+              summary_path.read_text(
+                  encoding="utf-8"
+              )
+          )
+
+          dimensions = summary["dimensions"]
+
+          expected_names = {
+              "positive-command-bias",
+              "negative-command-bias",
+              "controller-gain-loss",
+              "actuator-delay",
+              "control-noise",
+              "joint-damping",
+          }
+
+          assert summary["all_converged"] is True
+          assert len(dimensions) == 6
+
+          names = {
+              dimension["name"]
+              for dimension in dimensions
+          }
+
+          assert names == expected_names
+
+          assert (
+              summary["weakest_dimension"]
+              == dimensions[0]["name"]
+          )
+
+          positions = [
+              dimension[
+                  "normalized_boundary_position"
+              ]
+              for dimension in dimensions
+          ]
+
+          assert positions == sorted(positions)
+
+          for dimension in dimensions:
+              assert dimension["converged"] is True
+
+              assert (
+                  dimension[
+                      "largest_passing_magnitude"
+                  ]
+                  < dimension[
+                      "smallest_failing_magnitude"
+                  ]
+              )
+
+              assert (
+                  0.0
+                  < dimension[
+                      "normalized_boundary_position"
+                  ]
+                  <= 1.0
+              )
+
+              assert (
+                  dimension[
+                      "dominant_failure_type"
+                  ]
+                  is not None
+              )
+
+              search_dir = (
+                  run_dir
+                  / dimension["search_directory"]
+              )
+
+              boundary_path = (
+                  search_dir
+                  / "boundary_summary.json"
+              )
+
+              counterexample_path = (
+                  search_dir
+                  / "counterexample.yaml"
+              )
+
+              assert boundary_path.exists()
+              assert counterexample_path.exists()
+
+              boundary = json.loads(
+                  boundary_path.read_text(
+                      encoding="utf-8"
+                  )
+              )
+
+              failure_run = (
+                  search_dir
+                  / boundary[
+                      "counterexample_run_directory"
+                  ]
+              )
+
+              assert (
+                  failure_run
+                  / "failure_analysis.json"
+              ).exists()
+
+              assert (
+                  failure_run
+                  / "failure_clusters.csv"
+              ).exists()
+
+          print(
+              "Verified six-dimensional envelope."
+          )
+
+          print(
+              "Weakest dimension:",
+              summary["weakest_dimension"],
+          )
+          PYVERIFY
+
       - name: Upload evaluation artifacts
         if: always()
         uses: actions/upload-artifact@v7
@@ -308,5 +462,6 @@ jobs:
             runs/ci-failure/
             runs/ci-boundary/
             runs/ci-envelope/
+            runs/ci-multidimensional-envelope/
           if-no-files-found: ignore
           retention-days: 14
