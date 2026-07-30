@@ -8,6 +8,7 @@ from typer.testing import CliRunner
 
 from forge_ci.boundary_config import (
     BoundarySearchConfig,
+    build_boundary_experiment,
 )
 from forge_ci.boundary_search import (
     run_boundary_search,
@@ -68,18 +69,11 @@ def test_boundary_search_finds_minimal_bias_failure(
 
     assert summary.converged is True
 
-    assert (
-        summary.largest_passing_value
-        < summary.smallest_failing_value
-    )
+    assert summary.largest_passing_value < summary.smallest_failing_value
 
     assert summary.boundary_width <= 0.001
 
-    assert (
-        0.0
-        < summary.smallest_failing_value
-        <= _boundary_config().high
-    )
+    assert 0.0 < summary.smallest_failing_value <= _boundary_config().high
 
     assert summary.trials[0].label == "lower-bound"
     assert summary.trials[0].gate_passed is True
@@ -87,38 +81,23 @@ def test_boundary_search_finds_minimal_bias_failure(
     assert summary.trials[1].label == "upper-bound"
     assert summary.trials[1].gate_passed is False
 
-    assert (
-        summary.dominant_failure_type
-        == "command_bias"
-    )
+    assert summary.dominant_failure_type == "command_bias"
 
-    counterexample_path = (
-        search.search_dir / "counterexample.yaml"
-    )
+    counterexample_path = search.search_dir / "counterexample.yaml"
 
     assert counterexample_path.exists()
 
-    counterexample = yaml.safe_load(
-        counterexample_path.read_text(
-            encoding="utf-8"
-        )
-    )
+    counterexample = yaml.safe_load(counterexample_path.read_text(encoding="utf-8"))
 
     discovered_bias = counterexample["policy"]["target_bias"]
 
     assert discovered_bias < 0.0
 
-    assert abs(discovered_bias) == pytest.approx(
-        summary.smallest_failing_value
-    )
+    assert abs(discovered_bias) == pytest.approx(summary.smallest_failing_value)
 
-    assert (
-        search.search_dir / "boundary_summary.json"
-    ).exists()
+    assert (search.search_dir / "boundary_summary.json").exists()
 
-    assert (
-        search.search_dir / "boundary_trials.csv"
-    ).exists()
+    assert (search.search_dir / "boundary_trials.csv").exists()
 
 
 def test_boundary_search_is_repeatable(
@@ -136,27 +115,105 @@ def test_boundary_search_is_repeatable(
         tmp_path / "second",
     )
 
-    assert (
-        first.summary.largest_passing_value
-        == second.summary.largest_passing_value
-    )
+    assert first.summary.largest_passing_value == second.summary.largest_passing_value
 
-    assert (
-        first.summary.smallest_failing_value
-        == second.summary.smallest_failing_value
-    )
+    assert first.summary.smallest_failing_value == second.summary.smallest_failing_value
 
-    first_values = [
-        trial.parameter_value
-        for trial in first.summary.trials
-    ]
+    first_values = [trial.parameter_value for trial in first.summary.trials]
 
-    second_values = [
-        trial.parameter_value
-        for trial in second.summary.trials
-    ]
+    second_values = [trial.parameter_value for trial in second.summary.trials]
 
     assert first_values == second_values
+
+
+@pytest.mark.parametrize(
+    (
+        "parameter",
+        "direction",
+        "high",
+        "tolerance",
+        "magnitude",
+        "expected",
+    ),
+    [
+        (
+            "kp",
+            "negative",
+            10.0,
+            0.1,
+            5.0,
+            35.0,
+        ),
+        (
+            "control_noise_std",
+            "positive",
+            0.1,
+            0.001,
+            0.025,
+            0.025,
+        ),
+        (
+            "joint_damping",
+            "positive",
+            10.0,
+            0.1,
+            5.0,
+            9.0,
+        ),
+        (
+            "actuator_delay_steps",
+            "positive",
+            20.0,
+            1.0,
+            7.0,
+            7,
+        ),
+    ],
+)
+def test_generic_parameter_is_applied(
+    parameter: str,
+    direction: str,
+    high: float,
+    tolerance: float,
+    magnitude: float,
+    expected: float | int,
+) -> None:
+    payload = _boundary_config().model_dump(mode="python")
+
+    payload["parameter"] = parameter
+    payload["direction"] = direction
+    payload["high"] = high
+    payload["tolerance"] = tolerance
+
+    config = BoundarySearchConfig.model_validate(payload)
+
+    experiment = build_boundary_experiment(
+        config,
+        magnitude=magnitude,
+        name="generic-parameter-test",
+    )
+
+    container = experiment.policy if parameter in {"target_bias", "kp"} else experiment.environment
+
+    assert getattr(
+        container,
+        parameter,
+    ) == pytest.approx(expected)
+
+
+def test_integer_parameter_rejects_fractional_bounds() -> None:
+    payload = _boundary_config().model_dump(mode="python")
+
+    payload["parameter"] = "actuator_delay_steps"
+    payload["direction"] = "positive"
+    payload["high"] = 20.5
+    payload["tolerance"] = 1.0
+
+    with pytest.raises(
+        ValueError,
+        match="whole-number magnitudes",
+    ):
+        BoundarySearchConfig.model_validate(payload)
 
 
 def test_boundary_search_cli(

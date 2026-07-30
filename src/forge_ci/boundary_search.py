@@ -10,16 +10,17 @@ from pathlib import Path
 import yaml
 
 from forge_ci.boundary_config import (
+    INTEGER_PARAMETERS,
     BoundarySearchConfig,
+    baseline_parameter_value,
+    boundary_parameter_value,
+    build_boundary_experiment,
 )
 from forge_ci.boundary_models import (
     BoundarySearchSummary,
     BoundaryTrial,
 )
-from forge_ci.config import ExperimentConfig
-from forge_ci.failure_analysis import (
-    analyze_run_failures,
-)
+from forge_ci.failure_analysis import analyze_run_failures
 from forge_ci.runner import (
     EvaluationRun,
     run_evaluation,
@@ -74,23 +75,19 @@ def _create_experiment(
     *,
     value: float,
     label: str,
-) -> ExperimentConfig:
-    """Create one experiment at a selected parameter value."""
+):
+    """Create one experiment at a selected parameter magnitude."""
 
-    payload = config.base_experiment.model_dump(mode="python")
+    applied_value = boundary_parameter_value(
+        config,
+        value,
+    )
 
-    policy_payload = payload["policy"]
-
-    if not isinstance(policy_payload, dict):
-        raise BoundarySearchError("Base experiment has an invalid policy object.")
-
-    signed_value = value if config.direction == "positive" else -value
-
-    policy_payload["target_bias"] = signed_value
-
-    payload["name"] = f"{config.name}:{label}:{signed_value:.10f}"
-
-    return ExperimentConfig.model_validate(payload)
+    return build_boundary_experiment(
+        config,
+        magnitude=value,
+        name=(f"{config.name}:{label}:{applied_value}"),
+    )
 
 
 def _run_trial(
@@ -120,6 +117,12 @@ def _run_trial(
         index=index,
         label=label,
         parameter_value=value,
+        applied_parameter_value=(
+            boundary_parameter_value(
+                config,
+                value,
+            )
+        ),
         success_rate=(evaluation.summary.success_rate),
         mean_steps=evaluation.summary.mean_steps,
         gate_passed=(evaluation.summary.gate_passed),
@@ -139,6 +142,7 @@ def _write_trials_csv(
         "index",
         "label",
         "parameter_value",
+        "applied_parameter_value",
         "success_rate",
         "mean_steps",
         "gate_passed",
@@ -163,6 +167,7 @@ def _write_trials_csv(
                     "index": trial.index,
                     "label": trial.label,
                     "parameter_value": (f"{trial.parameter_value:.10f}"),
+                    "applied_parameter_value": (trial.applied_parameter_value),
                     "success_rate": (f"{trial.success_rate:.10f}"),
                     "mean_steps": (f"{trial.mean_steps:.10f}"),
                     "gate_passed": trial.gate_passed,
@@ -171,11 +176,38 @@ def _write_trials_csv(
             )
 
 
+def _search_resolution(
+    config: BoundarySearchConfig,
+) -> float:
+    """Return the minimum meaningful boundary width."""
+
+    if config.parameter in INTEGER_PARAMETERS:
+        return max(
+            config.tolerance,
+            1.0,
+        )
+
+    return config.tolerance
+
+
+def _midpoint(
+    config: BoundarySearchConfig,
+    low_value: float,
+    high_value: float,
+) -> float:
+    """Return a midpoint valid for the parameter type."""
+
+    if config.parameter in INTEGER_PARAMETERS:
+        return float((int(low_value) + int(high_value)) // 2)
+
+    return (low_value + high_value) / 2.0
+
+
 def run_boundary_search(
     config: BoundarySearchConfig,
     output_root: Path = Path("runs/boundaries"),
 ) -> BoundarySearchRun:
-    """Find the smallest known parameter value that fails."""
+    """Find the smallest known parameter magnitude that fails."""
 
     created_at = datetime.now(UTC)
     digest = _config_digest(config)
@@ -209,7 +241,7 @@ def run_boundary_search(
 
     if not low_trial.gate_passed:
         raise BoundarySearchError(
-            "The lower search bound already fails. Choose a lower value that passes."
+            "The lower search bound already fails. Choose a lower magnitude that passes."
         )
 
     high_trial, high_evaluation = _run_trial(
@@ -225,20 +257,25 @@ def run_boundary_search(
 
     if high_trial.gate_passed:
         raise BoundarySearchError(
-            "The upper search bound still passes. Choose a higher value that fails."
+            "The upper search bound still passes. Choose a higher magnitude that fails."
         )
 
     failing_evaluation = high_evaluation
     search_iterations = 0
+    resolution = _search_resolution(config)
 
-    while high_value - low_value > config.tolerance and search_iterations < config.max_iterations:
-        midpoint = (low_value + high_value) / 2.0
+    while high_value - low_value > resolution and search_iterations < config.max_iterations:
+        midpoint = _midpoint(
+            config,
+            low_value,
+            high_value,
+        )
 
         midpoint_trial, midpoint_evaluation = _run_trial(
             config,
             search_dir=search_dir,
             index=trial_index,
-            label=f"iteration-{search_iterations + 1}",
+            label=(f"iteration-{search_iterations + 1}"),
             value=midpoint,
         )
 
@@ -256,21 +293,13 @@ def run_boundary_search(
 
     analysis = analyze_run_failures(failing_evaluation.run_dir)
 
-    counterexample_payload = config.base_experiment.model_dump(mode="json")
-
-    counterexample_policy = counterexample_payload["policy"]
-
-    if not isinstance(
-        counterexample_policy,
-        dict,
-    ):
-        raise BoundarySearchError("Could not construct counterexample policy.")
-
-    counterexample_payload["name"] = f"{config.name}:minimal-counterexample"
-
-    counterexample_policy["target_bias"] = (
-        high_value if config.direction == "positive" else -high_value
+    counterexample_experiment = build_boundary_experiment(
+        config,
+        magnitude=high_value,
+        name=(f"{config.name}:minimal-counterexample"),
     )
+
+    counterexample_payload = counterexample_experiment.model_dump(mode="json")
 
     counterexample_path = search_dir / "counterexample.yaml"
 
@@ -285,10 +314,24 @@ def run_boundary_search(
     summary = BoundarySearchSummary(
         search_name=config.name,
         parameter=config.parameter,
+        direction=config.direction,
+        baseline_parameter_value=(baseline_parameter_value(config)),
         largest_passing_value=low_value,
         smallest_failing_value=high_value,
+        passing_applied_value=(
+            boundary_parameter_value(
+                config,
+                low_value,
+            )
+        ),
+        failing_applied_value=(
+            boundary_parameter_value(
+                config,
+                high_value,
+            )
+        ),
         boundary_width=boundary_width,
-        converged=(boundary_width <= config.tolerance),
+        converged=(boundary_width <= resolution),
         search_iterations=search_iterations,
         counterexample_run_directory=str(failing_evaluation.run_dir.relative_to(search_dir)),
         counterexample_config=(counterexample_path.name),
@@ -297,7 +340,7 @@ def run_boundary_search(
     )
 
     manifest = {
-        "schema_version": 1,
+        "schema_version": 2,
         "search_id": search_id,
         "created_at_utc": created_at.isoformat(),
         "config_sha256": digest,

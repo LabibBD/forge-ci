@@ -10,6 +10,7 @@ class BoundaryTrial(BaseModel):
     label: str
 
     parameter_value: float
+    applied_parameter_value: float | int
 
     success_rate: float = Field(
         ge=0.0,
@@ -27,9 +28,16 @@ class BoundarySearchSummary(BaseModel):
 
     search_name: str
     parameter: str
+    direction: str
+
+    baseline_parameter_value: float | int
 
     largest_passing_value: float
     smallest_failing_value: float
+
+    passing_applied_value: float | int
+    failing_applied_value: float | int
+
     boundary_width: float = Field(ge=0.0)
 
     converged: bool
