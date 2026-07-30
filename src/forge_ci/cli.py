@@ -16,6 +16,10 @@ from forge_ci.config import (
     ExperimentConfig,
     load_config,
 )
+from forge_ci.failure_analysis import (
+    FailureAnalysisError,
+    analyze_run_failures,
+)
 from forge_ci.runner import run_evaluation
 from forge_ci.sweep import run_robustness_sweep
 from forge_ci.sweep_config import (
@@ -252,6 +256,64 @@ def sweep(
 
     if not summary.gate_passed:
         raise typer.Exit(code=2)
+
+
+@app.command()
+def analyze_failures(
+    run_dir: Path,
+) -> None:
+    """Classify and cluster failed episodes."""
+
+    try:
+        analysis = analyze_run_failures(run_dir)
+    except FailureAnalysisError as exc:
+        typer.echo(
+            f"Failure-analysis error:\n{exc}",
+            err=True,
+        )
+        raise typer.Exit(code=1) from None
+
+    summary = analysis.summary
+
+    typer.echo(f"Analyzed run: {summary.run_id}")
+
+    typer.echo(
+        f"Failures: {summary.failed_episodes}/"
+        f"{summary.total_episodes} "
+        f"({summary.failure_rate:.1%})"
+    )
+
+    if summary.clusters:
+        typer.echo(
+            "Dominant failure: "
+            f"{summary.dominant_failure_type}"
+        )
+
+        for cluster in summary.clusters:
+            typer.echo(
+                f"{cluster.failure_type}: "
+                f"{cluster.count} episodes, "
+                f"confidence="
+                f"{cluster.mean_confidence:.1%}, "
+                f"severity={cluster.mean_severity:.3f}"
+            )
+
+        first_failure = summary.failures[0]
+
+        typer.echo("Evidence:")
+
+        for evidence in first_failure.evidence:
+            typer.echo(f"- {evidence}")
+    else:
+        typer.echo("No failed episodes were found.")
+
+    typer.echo(
+        f"Analysis: {analysis.analysis_path}"
+    )
+
+    typer.echo(
+        f"Clusters: {analysis.clusters_path}"
+    )
 
 
 def main() -> None:
