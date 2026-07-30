@@ -34,6 +34,10 @@ from forge_ci.failure_analysis import (
     FailureAnalysisError,
     analyze_run_failures,
 )
+from forge_ci.reporting import (
+    EnvelopeReportError,
+    render_envelope_report,
+)
 from forge_ci.runner import run_evaluation
 from forge_ci.sweep import run_robustness_sweep
 from forge_ci.sweep_config import (
@@ -408,6 +412,37 @@ def discover_envelope(
         )
 
     typer.echo(f"Converged: {'YES' if summary.all_converged else 'NO'}")
+
+
+@app.command()
+def render_report(
+    envelope_dir: Path,
+    output: Annotated[
+        Path | None,
+        typer.Option(
+            "--output",
+            "-o",
+            help="Output HTML path.",
+        ),
+    ] = None,
+) -> None:
+    """Render a self-contained envelope HTML report."""
+
+    try:
+        report = render_envelope_report(
+            envelope_dir,
+            output_path=output,
+        )
+    except EnvelopeReportError as exc:
+        typer.echo(
+            f"Report-generation error:\n{exc}",
+            err=True,
+        )
+        raise typer.Exit(code=1) from None
+
+    typer.echo(f"Report: {report.report_path}")
+
+    typer.echo(f"Report data: {report.data_path}")
 
 
 def main() -> None:
