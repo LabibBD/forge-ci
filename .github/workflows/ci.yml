@@ -1,0 +1,59 @@
+name: FORGE-CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: forge-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test and evaluate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install FORGE-CI
+        run: python -m pip install -e ".[dev]"
+
+      - name: Run tests and linting
+        run: ./scripts/check.sh
+
+      - name: Run end-to-end regression detection
+        run: ./scripts/e2e.sh
+
+      - name: Generate smoke-evaluation artifacts
+        run: |
+          forgeci evaluate \
+            configs/smoke.yaml \
+            --output-dir runs/ci
+
+      - name: Upload evaluation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-ci-smoke-artifacts
+          path: runs/ci/
+          if-no-files-found: ignore
+          retention-days: 14
