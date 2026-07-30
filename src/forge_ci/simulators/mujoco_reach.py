@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import mujoco
 import numpy as np
 
-MODEL_XML = """
+MODEL_XML_TEMPLATE = """
 <mujoco model="forge_ci_slider">
   <option timestep="0.005" gravity="0 0 0"/>
 
@@ -52,7 +52,7 @@ MODEL_XML = """
     <position
       name="slider_position"
       joint="slide"
-      kp="40"
+      kp="__CONTROLLER_KP__"
       ctrllimited="true"
       ctrlrange="0 1"
     />
@@ -72,9 +72,23 @@ class MujocoReachResult:
     initial_position: float
     final_position: float
     final_velocity: float
+
     target_position: float
+    commanded_target: float
+    controller_kp: float
 
     failure_reason: str | None
+
+
+def _build_model_xml(
+    controller_kp: float,
+) -> str:
+    """Insert the selected controller gain into the model."""
+
+    return MODEL_XML_TEMPLATE.replace(
+        "__CONTROLLER_KP__",
+        f"{controller_kp:.12g}",
+    )
 
 
 def run_reach_episode(
@@ -86,11 +100,16 @@ def run_reach_episode(
     velocity_tolerance: float,
     initial_position_low: float,
     initial_position_high: float,
+    controller_kp: float,
+    target_bias: float,
 ) -> MujocoReachResult:
     """Run one deterministic MuJoCo position-control episode."""
 
     if max_steps <= 0:
         raise ValueError("max_steps must be positive.")
+
+    if controller_kp <= 0.0:
+        raise ValueError("controller_kp must be positive.")
 
     if initial_position_low > initial_position_high:
         raise ValueError(
@@ -98,7 +117,10 @@ def run_reach_episode(
             "the upper bound."
         )
 
-    model = mujoco.MjModel.from_xml_string(MODEL_XML)
+    model = mujoco.MjModel.from_xml_string(
+        _build_model_xml(controller_kp)
+    )
+
     data = mujoco.MjData(model)
 
     joint_id = mujoco.mj_name2id(
@@ -130,6 +152,14 @@ def run_reach_episode(
         )
     )
 
+    commanded_target = float(
+        np.clip(
+            target_position + target_bias,
+            0.0,
+            1.0,
+        )
+    )
+
     mujoco.mj_resetData(model, data)
 
     data.qpos[qpos_address] = initial_position
@@ -143,7 +173,7 @@ def run_reach_episode(
     for _ in range(max_steps):
         completed_steps += 1
 
-        data.ctrl[actuator_id] = target_position
+        data.ctrl[actuator_id] = commanded_target
 
         mujoco.mj_step(model, data)
 
@@ -179,6 +209,8 @@ def run_reach_episode(
         final_position=final_position,
         final_velocity=final_velocity,
         target_position=target_position,
+        commanded_target=commanded_target,
+        controller_kp=controller_kp,
         failure_reason=(
             None
             if success

@@ -13,6 +13,7 @@ from forge_ci.config import (
     ExperimentConfig,
     LineWorldEnvironmentConfig,
     MujocoReachEnvironmentConfig,
+    PositionServoPolicyConfig,
 )
 from forge_ci.models import EpisodeResult, RunSummary
 from forge_ci.toy import (
@@ -147,6 +148,16 @@ def _run_mujoco_reach_episode(
             "Expected a MuJoCo reach environment configuration."
         )
 
+    policy_config = config.policy
+
+    if not isinstance(
+        policy_config,
+        PositionServoPolicyConfig,
+    ):
+        raise TypeError(
+            "Expected a position-servo policy configuration."
+        )
+
     from forge_ci.simulators.mujoco_reach import (
         run_reach_episode,
     )
@@ -171,6 +182,8 @@ def _run_mujoco_reach_episode(
         initial_position_high=(
             environment_config.initial_position_high
         ),
+        controller_kp=policy_config.kp,
+        target_bias=policy_config.target_bias,
     )
 
     return EpisodeResult(
@@ -186,6 +199,11 @@ def _run_mujoco_reach_episode(
         final_position=result.final_position,
         final_velocity=result.final_velocity,
         failure_reason=result.failure_reason,
+        policy_parameters={
+            "kp": policy_config.kp,
+            "target_bias": policy_config.target_bias,
+            "commanded_target": result.commanded_target,
+        },
     )
 
 

@@ -99,6 +99,18 @@ class PositionServoPolicyConfig(BaseModel):
 
     name: Literal["position_servo"] = "position_servo"
 
+    kp: float = Field(
+        default=40.0,
+        gt=0.0,
+        le=200.0,
+    )
+
+    target_bias: float = Field(
+        default=0.0,
+        ge=-1.0,
+        le=1.0,
+    )
+
 
 PolicyConfig = Annotated[
     GreedyPolicyConfig

@@ -21,6 +21,10 @@ class EpisodeResult(BaseModel):
 
     failure_reason: str | None = None
 
+    policy_parameters: dict[str, float] = Field(
+        default_factory=dict
+    )
+
 
 class RunSummary(BaseModel):
     """Aggregate metrics and CI-gate decision for an evaluation run."""

@@ -32,6 +32,8 @@ def run_probe(seed: int = 42) -> ProbeResult:
         velocity_tolerance=0.02,
         initial_position_low=0.0,
         initial_position_high=0.1,
+        controller_kp=40.0,
+        target_bias=0.0,
     )
 
     return ProbeResult(
