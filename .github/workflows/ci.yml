@@ -67,6 +67,61 @@ jobs:
             configs/mujoco_robustness_sweep.yaml \
             --output-dir runs/ci-sweep
 
+      - name: Generate failure-analysis artifacts
+        run: |
+          set +e
+
+          forgeci evaluate \
+            configs/mujoco_bias_failure.yaml \
+            --output-dir runs/ci-failure
+
+          evaluation_status=$?
+
+          set -e
+
+          if [ "$evaluation_status" -ne 2 ]; then
+            echo "Expected evaluation exit code 2."
+            echo "Received exit code: $evaluation_status"
+            exit 1
+          fi
+
+          failure_run=$(
+            find runs/ci-failure \
+              -mindepth 1 \
+              -maxdepth 1 \
+              -type d |
+            sort |
+            tail -n 1
+          )
+
+          forgeci analyze-failures "$failure_run"
+
+          python - "$failure_run" <<'PYVERIFY'
+          import json
+          import sys
+          from pathlib import Path
+
+          run_dir = Path(sys.argv[1])
+
+          report = json.loads(
+              (run_dir / "failure_analysis.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+
+          assert report["failed_episodes"] == 8
+          assert report["failure_rate"] == 1.0
+          assert report["dominant_failure_type"] == "command_bias"
+
+          clusters = report["clusters"]
+
+          assert len(clusters) == 1
+          assert clusters[0]["count"] == 8
+          assert clusters[0]["mean_confidence"] == 0.98
+
+          print("Failure-analysis artifact verification passed.")
+          PYVERIFY
+
       - name: Upload evaluation artifacts
         if: always()
         uses: actions/upload-artifact@v7
@@ -77,5 +132,6 @@ jobs:
             runs/ci-mujoco/
             runs/ci-mujoco-disturbed/
             runs/ci-sweep/
+            runs/ci-failure/
           if-no-files-found: ignore
           retention-days: 14
