@@ -19,13 +19,15 @@ class EnvironmentConfig(BaseModel):
 class PolicyConfig(BaseModel):
     """Configuration for the policy under evaluation."""
 
-    name: Literal["greedy"] = "greedy"
+    name: Literal["greedy", "alternating"] = "greedy"
 
 
 class GateConfig(BaseModel):
     """Thresholds that decide whether an evaluation passes CI."""
 
     min_success_rate: float = Field(default=1.0, ge=0.0, le=1.0)
+    max_success_rate_drop: float = Field(default=0.0, ge=0.0, le=1.0)
+    max_mean_steps_increase: float = Field(default=0.0, ge=0.0)
 
 
 class ExperimentConfig(BaseModel):

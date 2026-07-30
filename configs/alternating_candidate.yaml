@@ -1,4 +1,4 @@
-name: deterministic-smoke-test
+name: alternating-policy-candidate
 seed: 42
 episodes: 10
 
@@ -9,7 +9,7 @@ environment:
   slip_probability: 0.0
 
 policy:
-  name: greedy
+  name: alternating
 
 gate:
   min_success_rate: 1.0

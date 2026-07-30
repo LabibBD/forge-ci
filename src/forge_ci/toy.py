@@ -29,9 +29,7 @@ class LineWorld:
 
         self.steps += 1
 
-        applied_action = (
-            0 if rng.random() < self.slip_probability else action
-        )
+        applied_action = 0 if rng.random() < self.slip_probability else action
 
         self.position = max(
             0,
@@ -55,3 +53,22 @@ class GreedyPolicy:
         """Choose the next action from the current position."""
 
         return 1 if observation < self.goal else 0
+
+
+@dataclass
+class AlternatingPolicy:
+    """A deliberately slower policy that moves every second decision."""
+
+    goal: int
+    decision_count: int = 0
+
+    def act(self, observation: int) -> int:
+        """Alternate between moving and waiting."""
+
+        should_move = self.decision_count % 2 == 0
+        self.decision_count += 1
+
+        if observation >= self.goal:
+            return 0
+
+        return 1 if should_move else 0

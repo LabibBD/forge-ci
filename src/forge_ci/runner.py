@@ -11,7 +11,7 @@ from statistics import fmean
 from forge_ci import __version__
 from forge_ci.config import ExperimentConfig
 from forge_ci.models import EpisodeResult, RunSummary
-from forge_ci.toy import GreedyPolicy, LineWorld
+from forge_ci.toy import AlternatingPolicy, GreedyPolicy, LineWorld
 
 
 @dataclass(frozen=True)
@@ -58,7 +58,10 @@ def _run_episode(
         slip_probability=config.environment.slip_probability,
     )
 
-    policy = GreedyPolicy(goal=config.environment.goal)
+    if config.policy.name == "greedy":
+        policy = GreedyPolicy(goal=config.environment.goal)
+    else:
+        policy = AlternatingPolicy(goal=config.environment.goal)
 
     observation = environment.reset()
     total_reward = 0.0
@@ -99,16 +102,11 @@ def run_evaluation(
         for episode in range(config.episodes)
     ]
 
-    successes = sum(
-        result.success for result in episode_results
-    )
-
+    successes = sum(result.success for result in episode_results)
     failures = config.episodes - successes
     success_rate = successes / config.episodes
 
-    mean_steps = fmean(
-        result.steps for result in episode_results
-    )
+    mean_steps = fmean(result.steps for result in episode_results)
 
     summary = RunSummary(
         experiment_name=config.name,
@@ -141,19 +139,14 @@ def run_evaluation(
         "config": config.model_dump(mode="json"),
     }
 
-    _write_json(
-        run_dir / "manifest.json",
-        manifest,
-    )
+    _write_json(run_dir / "manifest.json", manifest)
 
     episodes_path = run_dir / "episodes.jsonl"
 
     with episodes_path.open("w", encoding="utf-8") as file:
         for result in episode_results:
             payload = result.model_dump(mode="json")
-            file.write(
-                json.dumps(payload, sort_keys=True) + "\n"
-            )
+            file.write(json.dumps(payload, sort_keys=True) + "\n")
 
     _write_json(
         run_dir / "summary.json",

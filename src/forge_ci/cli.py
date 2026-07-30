@@ -8,6 +8,7 @@ import yaml
 from pydantic import ValidationError
 
 from forge_ci import __version__
+from forge_ci.comparison import ComparisonError, compare_runs
 from forge_ci.config import ExperimentConfig, load_config
 from forge_ci.runner import run_evaluation
 
@@ -68,7 +69,7 @@ def evaluate(
         ),
     ] = Path("runs"),
 ) -> None:
-    """Run an experiment and enforce its regression gate."""
+    """Run an experiment and enforce its absolute quality gate."""
 
     experiment = _load_config_or_exit(config)
 
@@ -86,15 +87,60 @@ def evaluate(
         f"({summary.successes}/{summary.episodes})"
     )
 
-    typer.echo(
-        f"Required: {summary.min_success_rate:.1%}"
-    )
+    typer.echo(f"Required: {summary.min_success_rate:.1%}")
 
     typer.echo(
         f"Gate: {'PASS' if summary.gate_passed else 'FAIL'}"
     )
 
     if not summary.gate_passed:
+        raise typer.Exit(code=2)
+
+
+@app.command()
+def compare(
+    baseline: Path,
+    candidate: Path,
+) -> None:
+    """Compare a candidate run against a known-good baseline."""
+
+    try:
+        comparison = compare_runs(
+            baseline_dir=baseline,
+            candidate_dir=candidate,
+        )
+    except ComparisonError as exc:
+        typer.echo(f"Comparison error:\n{exc}", err=True)
+        raise typer.Exit(code=1) from None
+
+    typer.echo(
+        "Success rate: "
+        f"{comparison.baseline_success_rate:.1%} -> "
+        f"{comparison.candidate_success_rate:.1%}"
+    )
+
+    typer.echo(
+        f"Success delta: {comparison.success_rate_delta:+.1%}"
+    )
+
+    typer.echo(
+        "Mean steps: "
+        f"{comparison.baseline_mean_steps:.3f} -> "
+        f"{comparison.candidate_mean_steps:.3f}"
+    )
+
+    typer.echo(
+        f"Mean-step delta: {comparison.mean_steps_delta:+.3f}"
+    )
+
+    typer.echo(
+        f"Gate: {'PASS' if comparison.gate_passed else 'FAIL'}"
+    )
+
+    for reason in comparison.reasons:
+        typer.echo(f"Reason: {reason}")
+
+    if not comparison.gate_passed:
         raise typer.Exit(code=2)
 
 
