@@ -1,0 +1,77 @@
+name: position-servo-multidimensional-envelope
+
+base_experiment:
+  name: multidimensional-envelope-base
+  seed: 42
+  episodes: 3
+
+  environment:
+    name: mujoco_reach
+    target_position: 0.8
+    max_steps: 450
+    position_tolerance: 0.01
+    velocity_tolerance: 0.02
+    initial_position_low: 0.0
+    initial_position_high: 0.1
+    actuator_delay_steps: 0
+    control_noise_std: 0.0
+    joint_damping: 4.0
+
+  policy:
+    name: position_servo
+    kp: 40.0
+    target_bias: 0.0
+
+  gate:
+    min_success_rate: 1.0
+    max_success_rate_drop: 0.0
+    max_mean_steps_increase: 0.0
+
+dimensions:
+  - name: positive-command-bias
+    parameter: target_bias
+    direction: positive
+    low: 0.0
+    high: 0.08
+    tolerance: 0.001
+    max_iterations: 12
+
+  - name: negative-command-bias
+    parameter: target_bias
+    direction: negative
+    low: 0.0
+    high: 0.08
+    tolerance: 0.001
+    max_iterations: 12
+
+  - name: controller-gain-loss
+    parameter: kp
+    direction: negative
+    low: 0.0
+    high: 39.5
+    tolerance: 0.1
+    max_iterations: 12
+
+  - name: actuator-delay
+    parameter: actuator_delay_steps
+    direction: positive
+    low: 0.0
+    high: 200.0
+    tolerance: 1.0
+    max_iterations: 12
+
+  - name: control-noise
+    parameter: control_noise_std
+    direction: positive
+    low: 0.0
+    high: 0.5
+    tolerance: 0.001
+    max_iterations: 12
+
+  - name: joint-damping
+    parameter: joint_damping
+    direction: positive
+    low: 0.0
+    high: 96.0
+    tolerance: 0.5
+    max_iterations: 12
