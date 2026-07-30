@@ -16,10 +16,7 @@ from forge_ci.boundary_models import (
     BoundarySearchSummary,
     BoundaryTrial,
 )
-from forge_ci.config import (
-    ExperimentConfig,
-    PositionServoPolicyConfig,
-)
+from forge_ci.config import ExperimentConfig
 from forge_ci.failure_analysis import (
     analyze_run_failures,
 )
@@ -69,9 +66,7 @@ def _config_digest(
         separators=(",", ":"),
     )
 
-    return sha256(
-        canonical.encode("utf-8")
-    ).hexdigest()
+    return sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _create_experiment(
@@ -82,28 +77,18 @@ def _create_experiment(
 ) -> ExperimentConfig:
     """Create one experiment at a selected parameter value."""
 
-    payload = config.base_experiment.model_dump(
-        mode="python"
-    )
+    payload = config.base_experiment.model_dump(mode="python")
 
     policy_payload = payload["policy"]
 
     if not isinstance(policy_payload, dict):
-        raise BoundarySearchError(
-            "Base experiment has an invalid policy object."
-        )
+        raise BoundarySearchError("Base experiment has an invalid policy object.")
 
-    signed_value = (
-        value
-        if config.direction == "positive"
-        else -value
-    )
+    signed_value = value if config.direction == "positive" else -value
 
     policy_payload["target_bias"] = signed_value
 
-    payload["name"] = (
-        f"{config.name}:{label}:{signed_value:.10f}"
-    )
+    payload["name"] = f"{config.name}:{label}:{signed_value:.10f}"
 
     return ExperimentConfig.model_validate(payload)
 
@@ -124,11 +109,7 @@ def _run_trial(
         label=label,
     )
 
-    trial_root = (
-        search_dir
-        / "trials"
-        / f"{index:03d}-{label}"
-    )
+    trial_root = search_dir / "trials" / f"{index:03d}-{label}"
 
     evaluation = run_evaluation(
         experiment,
@@ -139,18 +120,10 @@ def _run_trial(
         index=index,
         label=label,
         parameter_value=value,
-        success_rate=(
-            evaluation.summary.success_rate
-        ),
+        success_rate=(evaluation.summary.success_rate),
         mean_steps=evaluation.summary.mean_steps,
-        gate_passed=(
-            evaluation.summary.gate_passed
-        ),
-        run_directory=str(
-            evaluation.run_dir.relative_to(
-                search_dir
-            )
-        ),
+        gate_passed=(evaluation.summary.gate_passed),
+        run_directory=str(evaluation.run_dir.relative_to(search_dir)),
     )
 
     return trial, evaluation
@@ -189,19 +162,11 @@ def _write_trials_csv(
                 {
                     "index": trial.index,
                     "label": trial.label,
-                    "parameter_value": (
-                        f"{trial.parameter_value:.10f}"
-                    ),
-                    "success_rate": (
-                        f"{trial.success_rate:.10f}"
-                    ),
-                    "mean_steps": (
-                        f"{trial.mean_steps:.10f}"
-                    ),
+                    "parameter_value": (f"{trial.parameter_value:.10f}"),
+                    "success_rate": (f"{trial.success_rate:.10f}"),
+                    "mean_steps": (f"{trial.mean_steps:.10f}"),
                     "gate_passed": trial.gate_passed,
-                    "run_directory": (
-                        trial.run_directory
-                    ),
+                    "run_directory": (trial.run_directory),
                 }
             )
 
@@ -215,10 +180,7 @@ def run_boundary_search(
     created_at = datetime.now(UTC)
     digest = _config_digest(config)
 
-    search_id = (
-        f"{created_at.strftime('%Y%m%dT%H%M%S%fZ')}-"
-        f"{digest[:8]}"
-    )
+    search_id = f"{created_at.strftime('%Y%m%dT%H%M%S%fZ')}-{digest[:8]}"
 
     search_dir = output_root / search_id
 
@@ -247,8 +209,7 @@ def run_boundary_search(
 
     if not low_trial.gate_passed:
         raise BoundarySearchError(
-            "The lower search bound already fails. "
-            "Choose a lower value that passes."
+            "The lower search bound already fails. Choose a lower value that passes."
         )
 
     high_trial, high_evaluation = _run_trial(
@@ -264,29 +225,21 @@ def run_boundary_search(
 
     if high_trial.gate_passed:
         raise BoundarySearchError(
-            "The upper search bound still passes. "
-            "Choose a higher value that fails."
+            "The upper search bound still passes. Choose a higher value that fails."
         )
 
     failing_evaluation = high_evaluation
     search_iterations = 0
 
-    while (
-        high_value - low_value > config.tolerance
-        and search_iterations < config.max_iterations
-    ):
-        midpoint = (
-            low_value + high_value
-        ) / 2.0
+    while high_value - low_value > config.tolerance and search_iterations < config.max_iterations:
+        midpoint = (low_value + high_value) / 2.0
 
-        midpoint_trial, midpoint_evaluation = (
-            _run_trial(
-                config,
-                search_dir=search_dir,
-                index=trial_index,
-                label=f"iteration-{search_iterations + 1}",
-                value=midpoint,
-            )
+        midpoint_trial, midpoint_evaluation = _run_trial(
+            config,
+            search_dir=search_dir,
+            index=trial_index,
+            label=f"iteration-{search_iterations + 1}",
+            value=midpoint,
         )
 
         trials.append(midpoint_trial)
@@ -299,45 +252,27 @@ def run_boundary_search(
             high_value = midpoint
             failing_evaluation = midpoint_evaluation
 
-    boundary_width = (
-        high_value - low_value
-    )
+    boundary_width = high_value - low_value
 
-    analysis = analyze_run_failures(
-        failing_evaluation.run_dir
-    )
+    analysis = analyze_run_failures(failing_evaluation.run_dir)
 
-    counterexample_payload = (
-        config.base_experiment.model_dump(
-            mode="json"
-        )
-    )
+    counterexample_payload = config.base_experiment.model_dump(mode="json")
 
-    counterexample_policy = (
-        counterexample_payload["policy"]
-    )
+    counterexample_policy = counterexample_payload["policy"]
 
     if not isinstance(
         counterexample_policy,
         dict,
     ):
-        raise BoundarySearchError(
-            "Could not construct counterexample policy."
-        )
+        raise BoundarySearchError("Could not construct counterexample policy.")
 
-    counterexample_payload["name"] = (
-        f"{config.name}:minimal-counterexample"
-    )
+    counterexample_payload["name"] = f"{config.name}:minimal-counterexample"
 
     counterexample_policy["target_bias"] = (
-        high_value
-        if config.direction == "positive"
-        else -high_value
+        high_value if config.direction == "positive" else -high_value
     )
 
-    counterexample_path = (
-        search_dir / "counterexample.yaml"
-    )
+    counterexample_path = search_dir / "counterexample.yaml"
 
     counterexample_path.write_text(
         yaml.safe_dump(
@@ -353,21 +288,11 @@ def run_boundary_search(
         largest_passing_value=low_value,
         smallest_failing_value=high_value,
         boundary_width=boundary_width,
-        converged=(
-            boundary_width <= config.tolerance
-        ),
+        converged=(boundary_width <= config.tolerance),
         search_iterations=search_iterations,
-        counterexample_run_directory=str(
-            failing_evaluation.run_dir.relative_to(
-                search_dir
-            )
-        ),
-        counterexample_config=(
-            counterexample_path.name
-        ),
-        dominant_failure_type=(
-            analysis.summary.dominant_failure_type
-        ),
+        counterexample_run_directory=str(failing_evaluation.run_dir.relative_to(search_dir)),
+        counterexample_config=(counterexample_path.name),
+        dominant_failure_type=(analysis.summary.dominant_failure_type),
         trials=trials,
     )
 
