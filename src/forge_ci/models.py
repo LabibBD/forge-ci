@@ -25,6 +25,10 @@ class EpisodeResult(BaseModel):
         default_factory=dict
     )
 
+    disturbance_parameters: dict[str, float | int] = Field(
+        default_factory=dict
+    )
+
 
 class RunSummary(BaseModel):
     """Aggregate metrics and CI-gate decision for an evaluation run."""

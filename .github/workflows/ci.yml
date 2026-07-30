@@ -55,6 +55,12 @@ jobs:
             configs/mujoco_reach.yaml \
             --output-dir runs/ci-mujoco
 
+      - name: Generate disturbed MuJoCo artifacts
+        run: |
+          forgeci evaluate \
+            configs/mujoco_disturbed.yaml \
+            --output-dir runs/ci-mujoco-disturbed
+
       - name: Upload evaluation artifacts
         if: always()
         uses: actions/upload-artifact@v7
@@ -63,5 +69,6 @@ jobs:
           path: |
             runs/ci-line/
             runs/ci-mujoco/
+            runs/ci-mujoco-disturbed/
           if-no-files-found: ignore
           retention-days: 14

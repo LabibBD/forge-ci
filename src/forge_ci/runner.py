@@ -184,6 +184,13 @@ def _run_mujoco_reach_episode(
         ),
         controller_kp=policy_config.kp,
         target_bias=policy_config.target_bias,
+        actuator_delay_steps=(
+            environment_config.actuator_delay_steps
+        ),
+        control_noise_std=(
+            environment_config.control_noise_std
+        ),
+        joint_damping=environment_config.joint_damping,
     )
 
     return EpisodeResult(
@@ -203,6 +210,13 @@ def _run_mujoco_reach_episode(
             "kp": policy_config.kp,
             "target_bias": policy_config.target_bias,
             "commanded_target": result.commanded_target,
+        },
+        disturbance_parameters={
+            "actuator_delay_steps": (
+                result.actuator_delay_steps
+            ),
+            "control_noise_std": result.control_noise_std,
+            "joint_damping": result.joint_damping,
         },
     )
 

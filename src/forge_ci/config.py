@@ -60,6 +60,24 @@ class MujocoReachEnvironmentConfig(BaseModel):
         le=1.0,
     )
 
+    actuator_delay_steps: int = Field(
+        default=0,
+        ge=0,
+        le=200,
+    )
+
+    control_noise_std: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=0.5,
+    )
+
+    joint_damping: float = Field(
+        default=4.0,
+        gt=0.0,
+        le=100.0,
+    )
+
     @model_validator(mode="after")
     def validate_initial_position_range(
         self,

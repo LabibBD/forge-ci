@@ -34,6 +34,9 @@ def run_probe(seed: int = 42) -> ProbeResult:
         initial_position_high=0.1,
         controller_kp=40.0,
         target_bias=0.0,
+        actuator_delay_steps=0,
+        control_noise_std=0.0,
+        joint_damping=4.0,
     )
 
     return ProbeResult(

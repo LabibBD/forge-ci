@@ -1,5 +1,6 @@
 """Deterministic MuJoCo reaching environment."""
 
+from collections import deque
 from dataclasses import dataclass
 
 import mujoco
@@ -27,7 +28,7 @@ MODEL_XML_TEMPLATE = """
         axis="1 0 0"
         limited="true"
         range="0 1"
-        damping="4"
+        damping="__JOINT_DAMPING__"
       />
 
       <geom
@@ -77,17 +78,28 @@ class MujocoReachResult:
     commanded_target: float
     controller_kp: float
 
+    actuator_delay_steps: int
+    control_noise_std: float
+    joint_damping: float
+
     failure_reason: str | None
 
 
 def _build_model_xml(
+    *,
     controller_kp: float,
+    joint_damping: float,
 ) -> str:
-    """Insert the selected controller gain into the model."""
+    """Insert selected physics and controller parameters."""
 
-    return MODEL_XML_TEMPLATE.replace(
-        "__CONTROLLER_KP__",
-        f"{controller_kp:.12g}",
+    return (
+        MODEL_XML_TEMPLATE.replace(
+            "__CONTROLLER_KP__",
+            f"{controller_kp:.12g}",
+        ).replace(
+            "__JOINT_DAMPING__",
+            f"{joint_damping:.12g}",
+        )
     )
 
 
@@ -102,14 +114,30 @@ def run_reach_episode(
     initial_position_high: float,
     controller_kp: float,
     target_bias: float,
+    actuator_delay_steps: int,
+    control_noise_std: float,
+    joint_damping: float,
 ) -> MujocoReachResult:
-    """Run one deterministic MuJoCo position-control episode."""
+    """Run one deterministic disturbed MuJoCo episode."""
 
     if max_steps <= 0:
         raise ValueError("max_steps must be positive.")
 
     if controller_kp <= 0.0:
         raise ValueError("controller_kp must be positive.")
+
+    if actuator_delay_steps < 0:
+        raise ValueError(
+            "actuator_delay_steps cannot be negative."
+        )
+
+    if control_noise_std < 0.0:
+        raise ValueError(
+            "control_noise_std cannot be negative."
+        )
+
+    if joint_damping <= 0.0:
+        raise ValueError("joint_damping must be positive.")
 
     if initial_position_low > initial_position_high:
         raise ValueError(
@@ -118,7 +146,10 @@ def run_reach_episode(
         )
 
     model = mujoco.MjModel.from_xml_string(
-        _build_model_xml(controller_kp)
+        _build_model_xml(
+            controller_kp=controller_kp,
+            joint_damping=joint_damping,
+        )
     )
 
     data = mujoco.MjData(model)
@@ -160,6 +191,10 @@ def run_reach_episode(
         )
     )
 
+    delayed_commands: deque[float] = deque(
+        [initial_position] * actuator_delay_steps
+    )
+
     mujoco.mj_resetData(model, data)
 
     data.qpos[qpos_address] = initial_position
@@ -173,7 +208,28 @@ def run_reach_episode(
     for _ in range(max_steps):
         completed_steps += 1
 
-        data.ctrl[actuator_id] = commanded_target
+        command_noise = float(
+            random_generator.normal(
+                loc=0.0,
+                scale=control_noise_std,
+            )
+        )
+
+        noisy_command = float(
+            np.clip(
+                commanded_target + command_noise,
+                0.0,
+                1.0,
+            )
+        )
+
+        if actuator_delay_steps > 0:
+            delayed_commands.append(noisy_command)
+            applied_command = delayed_commands.popleft()
+        else:
+            applied_command = noisy_command
+
+        data.ctrl[actuator_id] = applied_command
 
         mujoco.mj_step(model, data)
 
@@ -193,13 +249,8 @@ def run_reach_episode(
             success = True
             break
 
-    final_position = float(
-        data.qpos[qpos_address]
-    )
-
-    final_velocity = float(
-        data.qvel[dof_address]
-    )
+    final_position = float(data.qpos[qpos_address])
+    final_velocity = float(data.qvel[dof_address])
 
     return MujocoReachResult(
         seed=seed,
@@ -211,9 +262,10 @@ def run_reach_episode(
         target_position=target_position,
         commanded_target=commanded_target,
         controller_kp=controller_kp,
+        actuator_delay_steps=actuator_delay_steps,
+        control_noise_std=control_noise_std,
+        joint_damping=joint_damping,
         failure_reason=(
-            None
-            if success
-            else "target_not_reached"
+            None if success else "target_not_reached"
         ),
     )
