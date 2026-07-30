@@ -218,6 +218,25 @@ def _run_mujoco_reach_episode(
             "control_noise_std": result.control_noise_std,
             "joint_damping": result.joint_damping,
         },
+        diagnostics={
+            "target_position": result.target_position,
+            "initial_position_error": (
+                result.initial_position_error
+            ),
+            "final_position_error": (
+                result.final_position_error
+            ),
+            "mean_position_error": (
+                result.mean_position_error
+            ),
+            "peak_abs_velocity": (
+                result.peak_abs_velocity
+            ),
+            "overshoot_count": result.overshoot_count,
+            "control_saturation_fraction": (
+                result.control_saturation_fraction
+            ),
+        },
     )
 
 

@@ -82,6 +82,13 @@ class MujocoReachResult:
     control_noise_std: float
     joint_damping: float
 
+    initial_position_error: float
+    final_position_error: float
+    mean_position_error: float
+    peak_abs_velocity: float
+    overshoot_count: int
+    control_saturation_fraction: float
+
     failure_reason: str | None
 
 
@@ -202,8 +209,21 @@ def run_reach_episode(
 
     mujoco.mj_forward(model, data)
 
+    initial_position_error = abs(
+        initial_position - target_position
+    )
+
+    previous_signed_error = (
+        initial_position - target_position
+    )
+
     completed_steps = 0
     success = False
+
+    position_error_sum = 0.0
+    peak_abs_velocity = 0.0
+    overshoot_count = 0
+    saturated_commands = 0
 
     for _ in range(max_steps):
         completed_steps += 1
@@ -229,18 +249,50 @@ def run_reach_episode(
         else:
             applied_command = noisy_command
 
+        if (
+            applied_command <= 1e-12
+            or applied_command >= 1.0 - 1e-12
+        ):
+            saturated_commands += 1
+
         data.ctrl[actuator_id] = applied_command
 
         mujoco.mj_step(model, data)
 
-        position_error = abs(
-            float(data.qpos[qpos_address])
-            - target_position
+        current_position = float(
+            data.qpos[qpos_address]
         )
 
-        velocity = abs(
-            float(data.qvel[dof_address])
+        current_velocity = float(
+            data.qvel[dof_address]
         )
+
+        signed_error = (
+            current_position - target_position
+        )
+
+        position_error = abs(signed_error)
+        velocity = abs(current_velocity)
+
+        position_error_sum += position_error
+
+        peak_abs_velocity = max(
+            peak_abs_velocity,
+            velocity,
+        )
+
+        if (
+            signed_error != 0.0
+            and previous_signed_error != 0.0
+            and (
+                np.sign(signed_error)
+                != np.sign(previous_signed_error)
+            )
+        ):
+            overshoot_count += 1
+
+        if signed_error != 0.0:
+            previous_signed_error = signed_error
 
         if (
             position_error <= position_tolerance
@@ -251,6 +303,18 @@ def run_reach_episode(
 
     final_position = float(data.qpos[qpos_address])
     final_velocity = float(data.qvel[dof_address])
+
+    final_position_error = abs(
+        final_position - target_position
+    )
+
+    mean_position_error = (
+        position_error_sum / completed_steps
+    )
+
+    control_saturation_fraction = (
+        saturated_commands / completed_steps
+    )
 
     return MujocoReachResult(
         seed=seed,
@@ -265,6 +329,14 @@ def run_reach_episode(
         actuator_delay_steps=actuator_delay_steps,
         control_noise_std=control_noise_std,
         joint_damping=joint_damping,
+        initial_position_error=initial_position_error,
+        final_position_error=final_position_error,
+        mean_position_error=mean_position_error,
+        peak_abs_velocity=peak_abs_velocity,
+        overshoot_count=overshoot_count,
+        control_saturation_fraction=(
+            control_saturation_fraction
+        ),
         failure_reason=(
             None if success else "target_not_reached"
         ),

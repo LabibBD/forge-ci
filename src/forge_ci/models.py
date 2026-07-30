@@ -29,6 +29,10 @@ class EpisodeResult(BaseModel):
         default_factory=dict
     )
 
+    diagnostics: dict[str, float | int | bool] = Field(
+        default_factory=dict
+    )
+
 
 class RunSummary(BaseModel):
     """Aggregate metrics and CI-gate decision for an evaluation run."""
