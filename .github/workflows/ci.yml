@@ -200,6 +200,101 @@ jobs:
           )
           PYVERIFY
 
+      - name: Discover and verify robustness envelope
+        run: |
+          forgeci discover-envelope \
+            configs/mujoco_bias_envelope.yaml \
+            --output-dir runs/ci-envelope
+
+          envelope_run=$(
+            find runs/ci-envelope \
+              -mindepth 1 \
+              -maxdepth 1 \
+              -type d |
+            sort |
+            tail -n 1
+          )
+
+          test -n "$envelope_run"
+
+          python - "$envelope_run" <<'PYVERIFY'
+          import json
+          import sys
+          from pathlib import Path
+
+          run_dir = Path(sys.argv[1])
+
+          summary = json.loads(
+              (run_dir / "envelope_summary.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+
+          dimensions = summary["dimensions"]
+
+          assert summary["all_converged"] is True
+          assert len(dimensions) == 2
+
+          names = {
+              dimension["name"]
+              for dimension in dimensions
+          }
+
+          assert names == {
+              "positive-command-bias",
+              "negative-command-bias",
+          }
+
+          assert (
+              summary["weakest_dimension"]
+              == dimensions[0]["name"]
+          )
+
+          normalized_positions = [
+              dimension[
+                  "normalized_boundary_position"
+              ]
+              for dimension in dimensions
+          ]
+
+          assert normalized_positions == sorted(
+              normalized_positions
+          )
+
+          for dimension in dimensions:
+              assert dimension["converged"] is True
+              assert dimension["boundary_width"] <= 0.001
+
+              assert (
+                  dimension["dominant_failure_type"]
+                  == "command_bias"
+              )
+
+              search_dir = (
+                  run_dir
+                  / dimension["search_directory"]
+              )
+
+              assert search_dir.exists()
+
+              assert (
+                  search_dir / "counterexample.yaml"
+              ).exists()
+
+              assert (
+                  search_dir / "boundary_summary.json"
+              ).exists()
+
+          assert (
+              run_dir / "robustness_envelope.csv"
+          ).exists()
+
+          print(
+              "Verified weakest dimension:",
+              summary["weakest_dimension"],
+          )
+          PYVERIFY
+
       - name: Upload evaluation artifacts
         if: always()
         uses: actions/upload-artifact@v7
@@ -212,5 +307,6 @@ jobs:
             runs/ci-sweep/
             runs/ci-failure/
             runs/ci-boundary/
+            runs/ci-envelope/
           if-no-files-found: ignore
           retention-days: 14
