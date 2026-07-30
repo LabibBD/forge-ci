@@ -8,19 +8,35 @@ import yaml
 from pydantic import ValidationError
 
 from forge_ci import __version__
-from forge_ci.comparison import ComparisonError, compare_runs
-from forge_ci.config import ExperimentConfig, load_config
+from forge_ci.comparison import (
+    ComparisonError,
+    compare_runs,
+)
+from forge_ci.config import (
+    ExperimentConfig,
+    load_config,
+)
 from forge_ci.runner import run_evaluation
+from forge_ci.sweep import run_robustness_sweep
+from forge_ci.sweep_config import (
+    RobustnessSweepConfig,
+    load_sweep_config,
+)
 
 app = typer.Typer(
     name="forgeci",
-    help="Continuous evaluation for robot-learning policies.",
+    help=(
+        "Continuous evaluation for "
+        "robot-learning policies."
+    ),
     no_args_is_help=True,
 )
 
 
-def _load_config_or_exit(path: Path) -> ExperimentConfig:
-    """Load configuration or terminate with a readable error."""
+def _load_config_or_exit(
+    path: Path,
+) -> ExperimentConfig:
+    """Load an experiment or exit with a readable error."""
 
     try:
         return load_config(path)
@@ -30,9 +46,38 @@ def _load_config_or_exit(path: Path) -> ExperimentConfig:
             err=True,
         )
         raise typer.Exit(code=1) from None
-    except (ValidationError, yaml.YAMLError, ValueError) as exc:
+    except (
+        ValidationError,
+        yaml.YAMLError,
+        ValueError,
+    ) as exc:
         typer.echo(
             f"Invalid configuration:\n{exc}",
+            err=True,
+        )
+        raise typer.Exit(code=1) from None
+
+
+def _load_sweep_or_exit(
+    path: Path,
+) -> RobustnessSweepConfig:
+    """Load a robustness sweep or exit cleanly."""
+
+    try:
+        return load_sweep_config(path)
+    except FileNotFoundError:
+        typer.echo(
+            f"Sweep configuration not found: {path}",
+            err=True,
+        )
+        raise typer.Exit(code=1) from None
+    except (
+        ValidationError,
+        yaml.YAMLError,
+        ValueError,
+    ) as exc:
+        typer.echo(
+            f"Invalid sweep configuration:\n{exc}",
             err=True,
         )
         raise typer.Exit(code=1) from None
@@ -65,11 +110,11 @@ def evaluate(
         typer.Option(
             "--output-dir",
             "-o",
-            help="Directory in which run artifacts are written.",
+            help="Directory for run artifacts.",
         ),
     ] = Path("runs"),
 ) -> None:
-    """Run an experiment and enforce its absolute quality gate."""
+    """Run an experiment and enforce its absolute gate."""
 
     experiment = _load_config_or_exit(config)
 
@@ -87,10 +132,13 @@ def evaluate(
         f"({summary.successes}/{summary.episodes})"
     )
 
-    typer.echo(f"Required: {summary.min_success_rate:.1%}")
+    typer.echo(
+        f"Required: {summary.min_success_rate:.1%}"
+    )
 
     typer.echo(
-        f"Gate: {'PASS' if summary.gate_passed else 'FAIL'}"
+        f"Gate: "
+        f"{'PASS' if summary.gate_passed else 'FAIL'}"
     )
 
     if not summary.gate_passed:
@@ -102,7 +150,7 @@ def compare(
     baseline: Path,
     candidate: Path,
 ) -> None:
-    """Compare a candidate run against a known-good baseline."""
+    """Compare a candidate against a known-good run."""
 
     try:
         comparison = compare_runs(
@@ -110,7 +158,10 @@ def compare(
             candidate_dir=candidate,
         )
     except ComparisonError as exc:
-        typer.echo(f"Comparison error:\n{exc}", err=True)
+        typer.echo(
+            f"Comparison error:\n{exc}",
+            err=True,
+        )
         raise typer.Exit(code=1) from None
 
     typer.echo(
@@ -120,7 +171,8 @@ def compare(
     )
 
     typer.echo(
-        f"Success delta: {comparison.success_rate_delta:+.1%}"
+        f"Success delta: "
+        f"{comparison.success_rate_delta:+.1%}"
     )
 
     typer.echo(
@@ -130,17 +182,75 @@ def compare(
     )
 
     typer.echo(
-        f"Mean-step delta: {comparison.mean_steps_delta:+.3f}"
+        f"Mean-step delta: "
+        f"{comparison.mean_steps_delta:+.3f}"
     )
 
     typer.echo(
-        f"Gate: {'PASS' if comparison.gate_passed else 'FAIL'}"
+        f"Gate: "
+        f"{'PASS' if comparison.gate_passed else 'FAIL'}"
     )
 
     for reason in comparison.reasons:
         typer.echo(f"Reason: {reason}")
 
     if not comparison.gate_passed:
+        raise typer.Exit(code=2)
+
+
+@app.command()
+def sweep(
+    config: Path,
+    output_dir: Annotated[
+        Path,
+        typer.Option(
+            "--output-dir",
+            "-o",
+            help="Directory for sweep artifacts.",
+        ),
+    ] = Path("runs/sweeps"),
+) -> None:
+    """Run a policy across multiple disturbances."""
+
+    sweep_config = _load_sweep_or_exit(config)
+
+    sweep_run = run_robustness_sweep(
+        sweep_config,
+        output_root=output_dir,
+    )
+
+    summary = sweep_run.summary
+
+    typer.echo(f"Sweep: {sweep_run.sweep_dir}")
+
+    for scenario in summary.scenarios:
+        typer.echo(
+            f"{scenario.scenario_name}: "
+            f"success={scenario.success_rate:.1%}, "
+            f"mean_steps={scenario.mean_steps:.3f}, "
+            f"gate="
+            f"{'PASS' if scenario.gate_passed else 'FAIL'}"
+        )
+
+    typer.echo(
+        f"Worst success rate: "
+        f"{summary.worst_success_rate:.1%}"
+    )
+
+    typer.echo(
+        f"Worst mean steps: "
+        f"{summary.worst_mean_steps:.3f}"
+    )
+
+    typer.echo(
+        f"Gate: "
+        f"{'PASS' if summary.gate_passed else 'FAIL'}"
+    )
+
+    for reason in summary.reasons:
+        typer.echo(f"Reason: {reason}")
+
+    if not summary.gate_passed:
         raise typer.Exit(code=2)
 
 

@@ -61,6 +61,12 @@ jobs:
             configs/mujoco_disturbed.yaml \
             --output-dir runs/ci-mujoco-disturbed
 
+      - name: Generate robustness-sweep artifacts
+        run: |
+          forgeci sweep \
+            configs/mujoco_robustness_sweep.yaml \
+            --output-dir runs/ci-sweep
+
       - name: Upload evaluation artifacts
         if: always()
         uses: actions/upload-artifact@v7
@@ -70,5 +76,6 @@ jobs:
             runs/ci-line/
             runs/ci-mujoco/
             runs/ci-mujoco-disturbed/
+            runs/ci-sweep/
           if-no-files-found: ignore
           retention-days: 14

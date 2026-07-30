@@ -1,0 +1,58 @@
+name: position-servo-robustness
+
+base_experiment:
+  name: mujoco-robustness-base
+  seed: 42
+  episodes: 5
+
+  environment:
+    name: mujoco_reach
+    target_position: 0.8
+    max_steps: 1500
+    position_tolerance: 0.01
+    velocity_tolerance: 0.02
+    initial_position_low: 0.0
+    initial_position_high: 0.1
+    actuator_delay_steps: 0
+    control_noise_std: 0.0
+    joint_damping: 4.0
+
+  policy:
+    name: position_servo
+    kp: 40.0
+    target_bias: 0.0
+
+  gate:
+    min_success_rate: 0.0
+    max_success_rate_drop: 0.0
+    max_mean_steps_increase: 0.0
+
+scenarios:
+  - name: nominal
+    actuator_delay_steps: 0
+    control_noise_std: 0.0
+    joint_damping: 4.0
+
+  - name: delayed
+    actuator_delay_steps: 25
+    control_noise_std: 0.0
+    joint_damping: 4.0
+
+  - name: noisy
+    actuator_delay_steps: 0
+    control_noise_std: 0.005
+    joint_damping: 4.0
+
+  - name: high_damping
+    actuator_delay_steps: 0
+    control_noise_std: 0.0
+    joint_damping: 12.0
+
+  - name: combined
+    actuator_delay_steps: 20
+    control_noise_std: 0.004
+    joint_damping: 8.0
+
+gate:
+  min_scenario_success_rate: 1.0
+  max_scenario_mean_steps: 1400.0
