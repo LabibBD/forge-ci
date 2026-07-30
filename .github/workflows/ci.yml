@@ -43,17 +43,25 @@ jobs:
       - name: Run end-to-end regression detection
         run: ./scripts/e2e.sh
 
-      - name: Generate smoke-evaluation artifacts
+      - name: Generate LineWorld artifacts
         run: |
           forgeci evaluate \
             configs/smoke.yaml \
-            --output-dir runs/ci
+            --output-dir runs/ci-line
+
+      - name: Generate MuJoCo artifacts
+        run: |
+          forgeci evaluate \
+            configs/mujoco_reach.yaml \
+            --output-dir runs/ci-mujoco
 
       - name: Upload evaluation artifacts
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: forge-ci-smoke-artifacts
-          path: runs/ci/
+          name: forge-ci-evaluation-artifacts
+          path: |
+            runs/ci-line/
+            runs/ci-mujoco/
           if-no-files-found: ignore
           retention-days: 14

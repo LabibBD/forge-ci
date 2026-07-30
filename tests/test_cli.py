@@ -73,6 +73,7 @@ def test_evaluate_returns_two_when_gate_fails(
         """name: fail-test
 episodes: 2
 environment:
+  name: line_world
   goal: 5
   max_steps: 2
 """,

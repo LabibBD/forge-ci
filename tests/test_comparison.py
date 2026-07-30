@@ -19,6 +19,7 @@ def _greedy_config() -> ExperimentConfig:
             "seed": 12,
             "episodes": 5,
             "environment": {
+                "name": "line_world",
                 "goal": 5,
                 "max_steps": 10,
                 "slip_probability": 0.0,
@@ -42,6 +43,7 @@ def _alternating_config() -> ExperimentConfig:
             "seed": 12,
             "episodes": 5,
             "environment": {
+                "name": "line_world",
                 "goal": 5,
                 "max_steps": 10,
                 "slip_probability": 0.0,

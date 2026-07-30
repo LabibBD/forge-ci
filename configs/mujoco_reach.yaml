@@ -1,0 +1,20 @@
+name: mujoco-reach-smoke
+seed: 42
+episodes: 5
+
+environment:
+  name: mujoco_reach
+  target_position: 0.8
+  max_steps: 1000
+  position_tolerance: 0.01
+  velocity_tolerance: 0.02
+  initial_position_low: 0.0
+  initial_position_high: 0.1
+
+policy:
+  name: position_servo
+
+gate:
+  min_success_rate: 1.0
+  max_success_rate_drop: 0.0
+  max_mean_steps_increase: 10.0

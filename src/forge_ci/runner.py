@@ -9,9 +9,17 @@ from random import Random
 from statistics import fmean
 
 from forge_ci import __version__
-from forge_ci.config import ExperimentConfig
+from forge_ci.config import (
+    ExperimentConfig,
+    LineWorldEnvironmentConfig,
+    MujocoReachEnvironmentConfig,
+)
 from forge_ci.models import EpisodeResult, RunSummary
-from forge_ci.toy import AlternatingPolicy, GreedyPolicy, LineWorld
+from forge_ci.toy import (
+    AlternatingPolicy,
+    GreedyPolicy,
+    LineWorld,
+)
 
 
 @dataclass(frozen=True)
@@ -26,7 +34,12 @@ def _write_json(path: Path, payload: object) -> None:
     """Write formatted JSON with a trailing newline."""
 
     path.write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        json.dumps(
+            payload,
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
         encoding="utf-8",
     )
 
@@ -40,28 +53,46 @@ def _config_digest(config: ExperimentConfig) -> str:
         separators=(",", ":"),
     )
 
-    return sha256(canonical.encode("utf-8")).hexdigest()
+    return sha256(
+        canonical.encode("utf-8")
+    ).hexdigest()
 
 
-def _run_episode(
+def _run_line_world_episode(
     config: ExperimentConfig,
     episode: int,
 ) -> EpisodeResult:
-    """Run one independently seeded evaluation episode."""
+    """Run one LineWorld episode."""
+
+    environment_config = config.environment
+
+    if not isinstance(
+        environment_config,
+        LineWorldEnvironmentConfig,
+    ):
+        raise TypeError(
+            "Expected a LineWorld environment configuration."
+        )
 
     episode_seed = config.seed + episode
-    rng = Random(episode_seed)
+    random_generator = Random(episode_seed)
 
     environment = LineWorld(
-        goal=config.environment.goal,
-        max_steps=config.environment.max_steps,
-        slip_probability=config.environment.slip_probability,
+        goal=environment_config.goal,
+        max_steps=environment_config.max_steps,
+        slip_probability=(
+            environment_config.slip_probability
+        ),
     )
 
     if config.policy.name == "greedy":
-        policy = GreedyPolicy(goal=config.environment.goal)
+        policy = GreedyPolicy(
+            goal=environment_config.goal
+        )
     else:
-        policy = AlternatingPolicy(goal=config.environment.goal)
+        policy = AlternatingPolicy(
+            goal=environment_config.goal
+        )
 
     observation = environment.reset()
     total_reward = 0.0
@@ -70,9 +101,11 @@ def _run_episode(
     while True:
         action = policy.act(observation)
 
-        observation, reward, done, success = environment.step(
-            action,
-            rng,
+        observation, reward, done, success = (
+            environment.step(
+                action,
+                random_generator,
+            )
         )
 
         total_reward += reward
@@ -83,11 +116,105 @@ def _run_episode(
     return EpisodeResult(
         episode=episode,
         seed=episode_seed,
+        environment_name=environment_config.name,
+        policy_name=config.policy.name,
         success=success,
         steps=environment.steps,
         total_reward=round(total_reward, 6),
-        final_position=environment.position,
-        failure_reason=None if success else "max_steps_exceeded",
+        final_position=float(environment.position),
+        final_velocity=None,
+        failure_reason=(
+            None
+            if success
+            else "max_steps_exceeded"
+        ),
+    )
+
+
+def _run_mujoco_reach_episode(
+    config: ExperimentConfig,
+    episode: int,
+) -> EpisodeResult:
+    """Run one MuJoCo reaching episode."""
+
+    environment_config = config.environment
+
+    if not isinstance(
+        environment_config,
+        MujocoReachEnvironmentConfig,
+    ):
+        raise TypeError(
+            "Expected a MuJoCo reach environment configuration."
+        )
+
+    from forge_ci.simulators.mujoco_reach import (
+        run_reach_episode,
+    )
+
+    episode_seed = config.seed + episode
+
+    result = run_reach_episode(
+        seed=episode_seed,
+        target_position=(
+            environment_config.target_position
+        ),
+        max_steps=environment_config.max_steps,
+        position_tolerance=(
+            environment_config.position_tolerance
+        ),
+        velocity_tolerance=(
+            environment_config.velocity_tolerance
+        ),
+        initial_position_low=(
+            environment_config.initial_position_low
+        ),
+        initial_position_high=(
+            environment_config.initial_position_high
+        ),
+    )
+
+    return EpisodeResult(
+        episode=episode,
+        seed=episode_seed,
+        environment_name=environment_config.name,
+        policy_name=config.policy.name,
+        success=result.success,
+        steps=result.steps,
+        total_reward=(
+            1.0 if result.success else 0.0
+        ),
+        final_position=result.final_position,
+        final_velocity=result.final_velocity,
+        failure_reason=result.failure_reason,
+    )
+
+
+def _run_episode(
+    config: ExperimentConfig,
+    episode: int,
+) -> EpisodeResult:
+    """Dispatch an episode to the selected environment."""
+
+    if isinstance(
+        config.environment,
+        LineWorldEnvironmentConfig,
+    ):
+        return _run_line_world_episode(
+            config,
+            episode,
+        )
+
+    if isinstance(
+        config.environment,
+        MujocoReachEnvironmentConfig,
+    ):
+        return _run_mujoco_reach_episode(
+            config,
+            episode,
+        )
+
+    raise TypeError(
+        "Unsupported environment configuration."
     )
 
 
@@ -102,11 +229,18 @@ def run_evaluation(
         for episode in range(config.episodes)
     ]
 
-    successes = sum(result.success for result in episode_results)
+    successes = sum(
+        result.success
+        for result in episode_results
+    )
+
     failures = config.episodes - successes
     success_rate = successes / config.episodes
 
-    mean_steps = fmean(result.steps for result in episode_results)
+    mean_steps = fmean(
+        result.steps
+        for result in episode_results
+    )
 
     summary = RunSummary(
         experiment_name=config.name,
@@ -115,8 +249,13 @@ def run_evaluation(
         failures=failures,
         success_rate=success_rate,
         mean_steps=mean_steps,
-        min_success_rate=config.gate.min_success_rate,
-        gate_passed=success_rate >= config.gate.min_success_rate,
+        min_success_rate=(
+            config.gate.min_success_rate
+        ),
+        gate_passed=(
+            success_rate
+            >= config.gate.min_success_rate
+        ),
     )
 
     created_at = datetime.now(UTC)
@@ -128,10 +267,14 @@ def run_evaluation(
     )
 
     run_dir = output_root / run_id
-    run_dir.mkdir(parents=True, exist_ok=False)
+
+    run_dir.mkdir(
+        parents=True,
+        exist_ok=False,
+    )
 
     manifest = {
-        "schema_version": 1,
+        "schema_version": 2,
         "run_id": run_id,
         "created_at_utc": created_at.isoformat(),
         "forge_ci_version": __version__,
@@ -139,14 +282,29 @@ def run_evaluation(
         "config": config.model_dump(mode="json"),
     }
 
-    _write_json(run_dir / "manifest.json", manifest)
+    _write_json(
+        run_dir / "manifest.json",
+        manifest,
+    )
 
     episodes_path = run_dir / "episodes.jsonl"
 
-    with episodes_path.open("w", encoding="utf-8") as file:
+    with episodes_path.open(
+        "w",
+        encoding="utf-8",
+    ) as file:
         for result in episode_results:
-            payload = result.model_dump(mode="json")
-            file.write(json.dumps(payload, sort_keys=True) + "\n")
+            payload = result.model_dump(
+                mode="json"
+            )
+
+            file.write(
+                json.dumps(
+                    payload,
+                    sort_keys=True,
+                )
+                + "\n"
+            )
 
     _write_json(
         run_dir / "summary.json",

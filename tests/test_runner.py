@@ -46,6 +46,7 @@ def test_gate_fails_when_goal_cannot_be_reached(
             "name": "intentional-regression",
             "episodes": 4,
             "environment": {
+                "name": "line_world",
                 "goal": 5,
                 "max_steps": 3,
             },

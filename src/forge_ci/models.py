@@ -8,10 +8,17 @@ class EpisodeResult(BaseModel):
 
     episode: NonNegativeInt
     seed: int
+
+    environment_name: str
+    policy_name: str
+
     success: bool
     steps: NonNegativeInt
     total_reward: float
-    final_position: NonNegativeInt
+
+    final_position: float
+    final_velocity: float | None = None
+
     failure_reason: str | None = None
 
 
@@ -22,9 +29,19 @@ class RunSummary(BaseModel):
     episodes: int = Field(gt=0)
     successes: NonNegativeInt
     failures: NonNegativeInt
-    success_rate: float = Field(ge=0.0, le=1.0)
+
+    success_rate: float = Field(
+        ge=0.0,
+        le=1.0,
+    )
+
     mean_steps: float = Field(ge=0.0)
-    min_success_rate: float = Field(ge=0.0, le=1.0)
+
+    min_success_rate: float = Field(
+        ge=0.0,
+        le=1.0,
+    )
+
     gate_passed: bool
 
 
@@ -34,15 +51,27 @@ class ComparisonResult(BaseModel):
     baseline_run_id: str
     candidate_run_id: str
 
-    baseline_success_rate: float = Field(ge=0.0, le=1.0)
-    candidate_success_rate: float = Field(ge=0.0, le=1.0)
+    baseline_success_rate: float = Field(
+        ge=0.0,
+        le=1.0,
+    )
+
+    candidate_success_rate: float = Field(
+        ge=0.0,
+        le=1.0,
+    )
+
     success_rate_delta: float
 
     baseline_mean_steps: float = Field(ge=0.0)
     candidate_mean_steps: float = Field(ge=0.0)
     mean_steps_delta: float
 
-    max_success_rate_drop: float = Field(ge=0.0, le=1.0)
+    max_success_rate_drop: float = Field(
+        ge=0.0,
+        le=1.0,
+    )
+
     max_mean_steps_increase: float = Field(ge=0.0)
 
     gate_passed: bool
