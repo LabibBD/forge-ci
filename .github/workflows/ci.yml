@@ -449,6 +449,110 @@ jobs:
           )
           PYVERIFY
 
+      - name: Render and verify robustness report
+        run: |
+          envelope_run=$(
+            find runs/ci-multidimensional-envelope \
+              -mindepth 1 \
+              -maxdepth 1 \
+              -type d |
+            sort |
+            tail -n 1
+          )
+
+          test -n "$envelope_run"
+
+          forgeci render-report "$envelope_run"
+
+          report_path="$envelope_run/robustness_report.html"
+          data_path="$envelope_run/report_data.json"
+
+          test -s "$report_path"
+          test -s "$data_path"
+
+          python - \
+            "$envelope_run" \
+            "$report_path" \
+            "$data_path" <<'PYVERIFY'
+          import json
+          import sys
+          from pathlib import Path
+
+          envelope_dir = Path(sys.argv[1])
+          report_path = Path(sys.argv[2])
+          data_path = Path(sys.argv[3])
+
+          document = report_path.read_text(
+              encoding="utf-8"
+          )
+
+          payload = json.loads(
+              data_path.read_text(
+                  encoding="utf-8"
+              )
+          )
+
+          assert "<!doctype html>" in document
+          assert "Robot Robustness Envelope" in document
+          assert 'id="forge-report-data"' in document
+          assert "<svg" in document
+
+          assert payload["schema_version"] == 1
+
+          envelope = payload["envelope"]
+          dimensions = payload["dimensions"]
+
+          expected_names = {
+              "positive-command-bias",
+              "negative-command-bias",
+              "controller-gain-loss",
+              "actuator-delay",
+              "control-noise",
+              "joint-damping",
+          }
+
+          assert envelope["all_converged"] is True
+          assert len(dimensions) == 6
+
+          names = {
+              dimension["summary"]["name"]
+              for dimension in dimensions
+          }
+
+          assert names == expected_names
+
+          assert (
+              envelope["weakest_dimension"]
+              == envelope["dimensions"][0]["name"]
+          )
+
+          for dimension in dimensions:
+              summary = dimension["summary"]
+              artifacts = dimension["artifacts"]
+
+              assert summary["converged"] is True
+              assert summary["name"] in document
+
+              for relative_path in artifacts.values():
+                  artifact_path = (
+                      envelope_dir / relative_path
+                  )
+
+                  assert artifact_path.exists(), (
+                      f"Missing linked artifact: "
+                      f"{artifact_path}"
+                  )
+
+          print(
+              "Verified cloud robustness report."
+          )
+
+          print(
+              "Weakest dimension:",
+              envelope["weakest_dimension"],
+          )
+          PYVERIFY
+
       - name: Upload evaluation artifacts
         if: always()
         uses: actions/upload-artifact@v7
