@@ -1,0 +1,15 @@
+name: intentional-regression-test
+seed: 42
+episodes: 5
+
+environment:
+  name: line_world
+  goal: 5
+  max_steps: 3
+  slip_probability: 0.0
+
+policy:
+  name: greedy
+
+gate:
+  min_success_rate: 1.0
