@@ -16,6 +16,22 @@ from forge_ci.config import (
     ExperimentConfig,
     load_config,
 )
+from forge_ci.boundary_config import (
+    BoundarySearchConfig,
+    load_boundary_config,
+)
+from forge_ci.boundary_search import (
+    BoundarySearchError,
+    run_boundary_search,
+)
+from forge_ci.boundary_config import (
+    BoundarySearchConfig,
+    load_boundary_config,
+)
+from forge_ci.boundary_search import (
+    BoundarySearchError,
+    run_boundary_search,
+)
 from forge_ci.failure_analysis import (
     FailureAnalysisError,
     analyze_run_failures,
@@ -313,6 +329,154 @@ def analyze_failures(
 
     typer.echo(
         f"Clusters: {analysis.clusters_path}"
+    )
+
+
+@app.command()
+def discover_boundary(
+    config: Path,
+    output_dir: Annotated[
+        Path,
+        typer.Option(
+            "--output-dir",
+            "-o",
+            help="Directory for boundary-search artifacts.",
+        ),
+    ] = Path("runs/boundaries"),
+) -> None:
+    """Discover the smallest parameter value that fails."""
+
+    try:
+        search_config = load_boundary_config(config)
+
+        search = run_boundary_search(
+            search_config,
+            output_root=output_dir,
+        )
+    except FileNotFoundError:
+        typer.echo(
+            f"Boundary configuration not found: {config}",
+            err=True,
+        )
+        raise typer.Exit(code=1) from None
+    except (
+        BoundarySearchError,
+        ValidationError,
+        yaml.YAMLError,
+        ValueError,
+    ) as exc:
+        typer.echo(
+            f"Boundary-search error:\n{exc}",
+            err=True,
+        )
+        raise typer.Exit(code=1) from None
+
+    summary = search.summary
+
+    typer.echo(f"Search: {search.search_dir}")
+
+    typer.echo(
+        f"Largest passing {summary.parameter}: "
+        f"{summary.largest_passing_value:.6f}"
+    )
+
+    typer.echo(
+        f"Smallest failing {summary.parameter}: "
+        f"{summary.smallest_failing_value:.6f}"
+    )
+
+    typer.echo(
+        f"Boundary width: "
+        f"{summary.boundary_width:.6f}"
+    )
+
+    typer.echo(
+        f"Converged: "
+        f"{'YES' if summary.converged else 'NO'}"
+    )
+
+    typer.echo(
+        "Counterexample diagnosis: "
+        f"{summary.dominant_failure_type}"
+    )
+
+    typer.echo(
+        "Counterexample: "
+        f"{search.search_dir / summary.counterexample_config}"
+    )
+
+
+@app.command()
+def discover_boundary(
+    config: Path,
+    output_dir: Annotated[
+        Path,
+        typer.Option(
+            "--output-dir",
+            "-o",
+            help="Directory for boundary-search artifacts.",
+        ),
+    ] = Path("runs/boundaries"),
+) -> None:
+    """Discover the smallest parameter value that fails."""
+
+    try:
+        search_config = load_boundary_config(config)
+
+        search = run_boundary_search(
+            search_config,
+            output_root=output_dir,
+        )
+    except FileNotFoundError:
+        typer.echo(
+            f"Boundary configuration not found: {config}",
+            err=True,
+        )
+        raise typer.Exit(code=1) from None
+    except (
+        BoundarySearchError,
+        ValidationError,
+        yaml.YAMLError,
+        ValueError,
+    ) as exc:
+        typer.echo(
+            f"Boundary-search error:\n{exc}",
+            err=True,
+        )
+        raise typer.Exit(code=1) from None
+
+    summary = search.summary
+
+    typer.echo(f"Search: {search.search_dir}")
+
+    typer.echo(
+        f"Largest passing {summary.parameter}: "
+        f"{summary.largest_passing_value:.6f}"
+    )
+
+    typer.echo(
+        f"Smallest failing {summary.parameter}: "
+        f"{summary.smallest_failing_value:.6f}"
+    )
+
+    typer.echo(
+        f"Boundary width: "
+        f"{summary.boundary_width:.6f}"
+    )
+
+    typer.echo(
+        f"Converged: "
+        f"{'YES' if summary.converged else 'NO'}"
+    )
+
+    typer.echo(
+        "Counterexample diagnosis: "
+        f"{summary.dominant_failure_type}"
+    )
+
+    typer.echo(
+        "Counterexample: "
+        f"{search.search_dir / summary.counterexample_config}"
     )
 
 
