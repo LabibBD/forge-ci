@@ -23,6 +23,13 @@ from forge_ci.config import (
     ExperimentConfig,
     load_config,
 )
+from forge_ci.envelope_config import (
+    load_envelope_config,
+)
+from forge_ci.envelope_search import (
+    EnvelopeSearchError,
+    run_robustness_envelope,
+)
 from forge_ci.failure_analysis import (
     FailureAnalysisError,
     analyze_run_failures,
@@ -337,6 +344,70 @@ def discover_boundary(
     typer.echo(f"Counterexample diagnosis: {summary.dominant_failure_type}")
 
     typer.echo(f"Counterexample: {search.search_dir / summary.counterexample_config}")
+
+
+@app.command()
+def discover_envelope(
+    config: Path,
+    output_dir: Annotated[
+        Path,
+        typer.Option(
+            "--output-dir",
+            "-o",
+            help="Directory for envelope artifacts.",
+        ),
+    ] = Path("runs/envelopes"),
+) -> None:
+    """Discover and rank several robustness boundaries."""
+
+    try:
+        envelope_config = load_envelope_config(config)
+
+        envelope = run_robustness_envelope(
+            envelope_config,
+            output_root=output_dir,
+        )
+    except FileNotFoundError:
+        typer.echo(
+            f"Envelope configuration not found: {config}",
+            err=True,
+        )
+        raise typer.Exit(code=1) from None
+    except (
+        EnvelopeSearchError,
+        ValidationError,
+        yaml.YAMLError,
+        ValueError,
+    ) as exc:
+        typer.echo(
+            f"Envelope-search error:\n{exc}",
+            err=True,
+        )
+        raise typer.Exit(code=1) from None
+
+    summary = envelope.summary
+
+    typer.echo(f"Envelope: {envelope.envelope_dir}")
+
+    typer.echo(f"Weakest dimension: {summary.weakest_dimension}")
+
+    for rank, dimension in enumerate(
+        summary.dimensions,
+        start=1,
+    ):
+        typer.echo(
+            f"{rank}. {dimension.name}: "
+            f"{dimension.parameter}/"
+            f"{dimension.direction}, "
+            f"failure magnitude="
+            f"{dimension.smallest_failing_magnitude:.6f}, "
+            f"normalized="
+            f"{dimension.normalized_boundary_position:.1%}, "
+            f"diagnosis="
+            f"{dimension.dominant_failure_type}"
+        )
+
+    typer.echo(f"Converged: {'YES' if summary.all_converged else 'NO'}")
 
 
 def main() -> None:
