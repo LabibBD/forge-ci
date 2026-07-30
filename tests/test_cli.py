@@ -13,7 +13,7 @@ def test_version_command() -> None:
     result = runner.invoke(app, ["version"])
 
     assert result.exit_code == 0
-    assert "FORGE-CI 0.1.0" in result.stdout
+    assert "FORGE-CI 1.0.0" in result.stdout
 
 
 def test_validate_command(tmp_path: Path) -> None:
