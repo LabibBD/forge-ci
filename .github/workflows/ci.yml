@@ -122,6 +122,84 @@ jobs:
           print("Failure-analysis artifact verification passed.")
           PYVERIFY
 
+      - name: Discover and verify failure boundary
+        run: |
+          forgeci discover-boundary \
+            configs/mujoco_bias_boundary.yaml \
+            --output-dir runs/ci-boundary
+
+          boundary_run=$(
+            find runs/ci-boundary \
+              -mindepth 1 \
+              -maxdepth 1 \
+              -type d |
+            sort |
+            tail -n 1
+          )
+
+          test -n "$boundary_run"
+
+          python - "$boundary_run" <<'PYVERIFY'
+          import json
+          import sys
+          from pathlib import Path
+
+          import yaml
+
+          run_dir = Path(sys.argv[1])
+
+          summary = json.loads(
+              (run_dir / "boundary_summary.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+
+          counterexample = yaml.safe_load(
+              (run_dir / "counterexample.yaml").read_text(
+                  encoding="utf-8"
+              )
+          )
+
+          assert summary["converged"] is True
+          assert summary["boundary_width"] <= 0.001
+
+          assert (
+              summary["largest_passing_value"]
+              < summary["smallest_failing_value"]
+          )
+
+          assert (
+              summary["dominant_failure_type"]
+              == "command_bias"
+          )
+
+          trials = summary["trials"]
+
+          assert len(trials) >= 3
+          assert trials[0]["label"] == "lower-bound"
+          assert trials[0]["gate_passed"] is True
+          assert trials[1]["label"] == "upper-bound"
+          assert trials[1]["gate_passed"] is False
+
+          discovered_bias = (
+              counterexample["policy"]["target_bias"]
+          )
+
+          assert discovered_bias < 0.0
+
+          assert abs(
+              abs(discovered_bias)
+              - summary["smallest_failing_value"]
+          ) <= 1e-12
+
+          print(
+              "Verified failure boundary:",
+              summary["largest_passing_value"],
+              "->",
+              summary["smallest_failing_value"],
+          )
+          PYVERIFY
+
       - name: Upload evaluation artifacts
         if: always()
         uses: actions/upload-artifact@v7
@@ -133,5 +211,6 @@ jobs:
             runs/ci-mujoco-disturbed/
             runs/ci-sweep/
             runs/ci-failure/
+            runs/ci-boundary/
           if-no-files-found: ignore
           retention-days: 14
