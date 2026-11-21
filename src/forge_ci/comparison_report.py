@@ -42,7 +42,9 @@ def render_comparison_report(
     except ValidationError as exc:
         raise ComparisonReportError(f"Invalid comparison artifact:\n{exc}") from exc
 
-    output_path = output_path if output_path is not None else candidate_dir / "comparison_report.html"
+    output_path = (
+        output_path if output_path is not None else candidate_dir / "comparison_report.html"
+    )
     if output_path.resolve() == input_path.resolve():
         raise ComparisonReportError("HTML output cannot overwrite comparison.json.")
 
