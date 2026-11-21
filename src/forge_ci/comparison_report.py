@@ -1,5 +1,8 @@
 """Safe standalone HTML reporting for baseline-versus-candidate regression comparisons."""
 
+# HTML/CSS template lines are deliberately kept intact for readability.
+# ruff: noqa: E501
+
 import html
 import json
 from dataclasses import dataclass
