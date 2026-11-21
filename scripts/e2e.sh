@@ -78,4 +78,23 @@ if [[ ! -f "$candidate_fail_run/comparison.json" ]]; then
   exit 1
 fi
 
+echo "Rendering report for the deliberately failing comparison..."
+
+set +e
+forgeci render-comparison "$candidate_fail_run"
+report_exit_code=$?
+set -e
+
+if [[ "$report_exit_code" -ne 2 ]]; then
+  echo "Expected failing HTML report exit code 2, received: $report_exit_code"
+  exit 1
+fi
+
+if [[ ! -s "$candidate_fail_run/comparison_report.html" ]]; then
+  echo "Expected nonempty HTML comparison report."
+  exit 1
+fi
+
+echo "HTML regression report generation passed."
+
 echo "End-to-end regression detection passed."

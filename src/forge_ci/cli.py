@@ -19,6 +19,10 @@ from forge_ci.comparison import (
     ComparisonError,
     compare_runs,
 )
+from forge_ci.comparison_report import (
+    ComparisonReportError,
+    render_comparison_report,
+)
 from forge_ci.config import (
     ExperimentConfig,
     load_config,
@@ -195,6 +199,27 @@ def compare(
         typer.echo(f"Reason: {reason}")
 
     if not comparison.gate_passed:
+        raise typer.Exit(code=2)
+
+
+@app.command()
+def render_comparison(
+    candidate_dir: Path,
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="Standalone HTML report output."),
+    ] = None,
+) -> None:
+    """Render a self-contained report from an existing comparison.json."""
+    try:
+        report = render_comparison_report(candidate_dir, output_path=output)
+    except ComparisonReportError as exc:
+        typer.echo(f"Comparison report error:\n{exc}", err=True)
+        raise typer.Exit(code=1) from None
+
+    typer.echo(f"Report: {report.report_path}")
+    typer.echo(f"Gate: {'PASS' if report.gate_passed else 'FAIL'}")
+    if not report.gate_passed:
         raise typer.Exit(code=2)
 
 
