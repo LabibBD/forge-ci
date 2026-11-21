@@ -553,6 +553,22 @@ jobs:
           )
           PYVERIFY
 
+      - name: Generate showcase report
+        run: |
+          bash scripts/showcase.sh runs/ci-showcase
+
+          report_path=$(
+            find runs/ci-showcase \
+              -type f \
+              -name comparison_report.html \
+              -print -quit
+          )
+
+          test -n "$report_path"
+          test -s "$report_path"
+
+          echo "Showcase artifact generated: $report_path"
+
       - name: Upload evaluation artifacts
         if: always()
         uses: actions/upload-artifact@v7
@@ -567,5 +583,6 @@ jobs:
             runs/ci-boundary/
             runs/ci-envelope/
             runs/ci-multidimensional-envelope/
+            runs/ci-showcase/
           if-no-files-found: ignore
           retention-days: 14
