@@ -32,6 +32,30 @@ python -m pip install -e ".[dev,sim]"
 ./scripts/check.sh
 ```
 
+## One-command showcase
+
+This command creates a **real, reproducible regression demonstration** using two
+seeded LineWorld policies. It saves both run artifacts, the comparison JSON,
+and a self-contained HTML report (the intentionally slower policy is expected
+to fail its relative regression gate).
+
+```bash
+bash scripts/showcase.sh
+# Optionally choose the parent directory:
+bash scripts/showcase.sh runs/my-demo
+```
+
+The command prints the complete path to `comparison_report.html`. Open that
+HTML file in a browser for a screenshot or share the CI evaluation artifact
+with reviewers. The CI workflow also runs this exact demo and uploads its
+output under `runs/ci-showcase/`. No MuJoCo installation is required
+for this specific showcase, although the full CI suite uses it.
+
+**Interpretation:** the demonstration compares two simple deterministic
+controllers and verifies a *performance regression*, not a real-world robot
+failure. The dashboard reports success-rate and mean-step changes against
+explicit thresholds.
+
 ### 1. Run an evaluation
 
 ```bash
