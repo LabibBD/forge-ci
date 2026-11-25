@@ -103,6 +103,8 @@ class PandaReachEnvironmentConfig(BaseModel):
         pattern=r"^[0-9a-f]{40}$",
     )
     duration_s: float = Field(default=6.0, ge=2.0, le=30.0)
+    # Legacy runs without this field used the full observation horizon.
+    step_metric: Literal["horizon", "settling_or_horizon"] = "horizon"
     position_tolerance_m: float = Field(default=0.01, gt=0.0)
     speed_tolerance_m_s: float = Field(default=0.02, ge=0.0)
 
