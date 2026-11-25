@@ -93,9 +93,24 @@ class MujocoReachEnvironmentConfig(BaseModel):
         return self
 
 
+class PandaReachEnvironmentConfig(BaseModel):
+    """Pinned external Panda model and task settings."""
+
+    name: Literal["panda_reach"] = "panda_reach"
+    model_path: str = "mujoco_menagerie/franka_emika_panda/scene.xml"
+    model_revision: str = Field(
+        default="eea4c7431b63da8278b0ff31638e0b0e941cec0e",
+        pattern=r"^[0-9a-f]{40}$",
+    )
+    duration_s: float = Field(default=6.0, ge=2.0, le=30.0)
+    position_tolerance_m: float = Field(default=0.01, gt=0.0)
+    speed_tolerance_m_s: float = Field(default=0.02, ge=0.0)
+
+
 EnvironmentConfig = Annotated[
     LineWorldEnvironmentConfig
-    | MujocoReachEnvironmentConfig,
+    | MujocoReachEnvironmentConfig
+    | PandaReachEnvironmentConfig,
     Field(discriminator="name"),
 ]
 
@@ -130,10 +145,20 @@ class PositionServoPolicyConfig(BaseModel):
     )
 
 
+class PandaReachPolicyConfig(BaseModel):
+    """Position-only IK with an optional degraded command channel."""
+
+    name: Literal["panda_reach_ik"] = "panda_reach_ik"
+    command_bias_rad: float = Field(default=0.0, ge=-0.5, le=0.5)
+    command_delay_steps: int = Field(default=0, ge=0, le=2000)
+    command_noise_std_rad: float = Field(default=0.0, ge=0.0, le=0.2)
+
+
 PolicyConfig = Annotated[
     GreedyPolicyConfig
     | AlternatingPolicyConfig
-    | PositionServoPolicyConfig,
+    | PositionServoPolicyConfig
+    | PandaReachPolicyConfig,
     Field(discriminator="name"),
 ]
 
@@ -209,6 +234,10 @@ class ExperimentConfig(BaseModel):
                     "mujoco_reach requires the "
                     "position_servo policy."
                 )
+
+        if isinstance(self.environment, PandaReachEnvironmentConfig):
+            if not isinstance(self.policy, PandaReachPolicyConfig):
+                raise ValueError("panda_reach requires the panda_reach_ik policy.")
 
         return self
 
