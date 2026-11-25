@@ -282,6 +282,8 @@ def _run_panda_episode(config: ExperimentConfig, episode: int) -> EpisodeResult:
         "ik_error_m": result["ik_error_m"],
         "target_displacement_m": result["target_displacement_m"],
         "simulation_seconds": result["simulation_seconds"],
+        "simulation_steps": result["steps"],
+        "timestep_s": result["timestep_s"],
     }
     for axis, coordinate in zip("xyz", result["target_xyz_m"], strict=True):
         diagnostics[f"target_{axis}_m"] = coordinate
@@ -290,13 +292,23 @@ def _run_panda_episode(config: ExperimentConfig, episode: int) -> EpisodeResult:
     if result["settling_time_s"] is not None:
         diagnostics["settling_time_s"] = result["settling_time_s"]
 
+    # Observe the full horizon even if a successful trial settles early.
+    # A failed trial receives the full horizon as its completion cost.
+    completion_steps = result["steps"]
+    if (
+        env.step_metric == "settling_or_horizon"
+        and result["passed"]
+        and result["settling_step"] is not None
+    ):
+        completion_steps = result["settling_step"]
+
     return EpisodeResult(
         episode=episode,
         seed=seed,
         environment_name=env.name,
         policy_name=policy.name,
         success=result["passed"],
-        steps=result["steps"],
+        steps=completion_steps,
         total_reward=float(result["passed"]),
         # The legacy scalar fields store error magnitude and tool speed, not x position.
         final_position=result["final_position_error_m"],
