@@ -174,6 +174,8 @@ def run_panda_episode(
             "model": "Franka Emika Panda (MuJoCo Menagerie)",
             "seed": seed,
             "steps": steps,
+            "settling_step": settling_step,
+            "timestep_s": float(dt),
             "command_bias_rad": command_bias_rad,
             "command_delay_steps": command_delay_steps,
             "command_noise_std_rad": command_noise_std_rad,
