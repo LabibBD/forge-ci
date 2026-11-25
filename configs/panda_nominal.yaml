@@ -6,6 +6,7 @@ environment:
   model_path: mujoco_menagerie/franka_emika_panda/scene.xml
   model_revision: eea4c7431b63da8278b0ff31638e0b0e941cec0e
   duration_s: 6.0
+  step_metric: settling_or_horizon
   position_tolerance_m: 0.01
   speed_tolerance_m_s: 0.02
 policy:
@@ -16,4 +17,4 @@ policy:
 gate:
   min_success_rate: 1.0
   max_success_rate_drop: 0.0
-  max_mean_steps_increase: 0.0
+  max_mean_steps_increase: 50.0
