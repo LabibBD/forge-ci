@@ -58,6 +58,7 @@ for scenario in ("nominal", "bias", "delay", "noise"):
     summary[scenario] = {
         "episodes": len(rows),
         "successes": info["successes"],
+        "mean_completion_steps": info["mean_steps"],
         "mean_final_error_mm": 1000 * mean(errors),
         "max_final_error_mm": 1000 * max(errors),
         "settled_episodes": len(settled),
