@@ -1,6 +1,7 @@
 """Evaluation runner and artifact writer."""
 
 import json
+import subprocess
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
@@ -13,6 +14,8 @@ from forge_ci.config import (
     ExperimentConfig,
     LineWorldEnvironmentConfig,
     MujocoReachEnvironmentConfig,
+    PandaReachEnvironmentConfig,
+    PandaReachPolicyConfig,
     PositionServoPolicyConfig,
 )
 from forge_ci.models import EpisodeResult, RunSummary
@@ -240,6 +243,74 @@ def _run_mujoco_reach_episode(
     )
 
 
+def _run_panda_episode(config: ExperimentConfig, episode: int) -> EpisodeResult:
+    """Adapt the articulated reaching task to the standard run artifacts."""
+    env = config.environment
+    policy = config.policy
+    if not isinstance(env, PandaReachEnvironmentConfig):
+        raise TypeError("Expected Panda environment configuration.")
+    if not isinstance(policy, PandaReachPolicyConfig):
+        raise TypeError("Expected Panda reaching policy configuration.")
+
+    from forge_ci.simulators.panda_reach import run_panda_episode
+
+    model_path = Path(env.model_path).resolve()
+    if not model_path.is_file():
+        raise ValueError(f"Panda model not found: {model_path}")
+    revision = subprocess.run(
+        ["git", "-C", str(model_path.parent), "rev-parse", "HEAD"],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    if revision != env.model_revision:
+        raise ValueError(f"Panda model revision mismatch: {revision}")
+
+    seed = config.seed + episode
+    result = run_panda_episode(
+        model_path,
+        seed=seed,
+        duration_s=env.duration_s,
+        position_tolerance_m=env.position_tolerance_m,
+        speed_tolerance_m_s=env.speed_tolerance_m_s,
+        command_bias_rad=policy.command_bias_rad,
+        command_delay_steps=policy.command_delay_steps,
+        command_noise_std_rad=policy.command_noise_std_rad,
+    )
+    diagnostics = {
+        "final_position_error_m": result["final_position_error_m"],
+        "mean_position_error_m": result["mean_position_error_m"],
+        "peak_position_error_m": result["peak_position_error_m"],
+        "ik_error_m": result["ik_error_m"],
+        "target_displacement_m": result["target_displacement_m"],
+        "simulation_seconds": result["simulation_seconds"],
+    }
+    for axis, coordinate in zip("xyz", result["target_xyz_m"], strict=True):
+        diagnostics[f"target_{axis}_m"] = coordinate
+    for axis, coordinate in zip("xyz", result["final_tool_xyz_m"], strict=True):
+        diagnostics[f"final_tool_{axis}_m"] = coordinate
+    if result["settling_time_s"] is not None:
+        diagnostics["settling_time_s"] = result["settling_time_s"]
+
+    return EpisodeResult(
+        episode=episode,
+        seed=seed,
+        environment_name=env.name,
+        policy_name=policy.name,
+        success=result["passed"],
+        steps=result["steps"],
+        total_reward=float(result["passed"]),
+        # The legacy scalar fields store error magnitude and tool speed, not x position.
+        final_position=result["final_position_error_m"],
+        final_velocity=result["final_tool_speed_m_s"],
+        failure_reason=None if result["passed"] else "target_not_reached",
+        disturbance_parameters={
+            "command_bias_rad": policy.command_bias_rad,
+            "command_delay_steps": policy.command_delay_steps,
+            "command_noise_std_rad": policy.command_noise_std_rad,
+        },
+        diagnostics=diagnostics,
+    )
+
+
 def _run_episode(
     config: ExperimentConfig,
     episode: int,
@@ -263,6 +334,9 @@ def _run_episode(
             config,
             episode,
         )
+
+    if isinstance(config.environment, PandaReachEnvironmentConfig):
+        return _run_panda_episode(config, episode)
 
     raise TypeError(
         "Unsupported environment configuration."
