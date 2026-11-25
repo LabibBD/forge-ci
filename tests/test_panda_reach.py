@@ -46,3 +46,29 @@ def test_panda_nominal_and_bias_regression(tmp_path):
     comparison = compare_runs(baseline.run_dir, candidate.run_dir)
     assert not comparison.gate_passed
     assert comparison.success_rate_delta == -1.0
+
+
+@pytest.mark.skipif(not MODEL.exists(), reason="External pinned Menagerie model not installed")
+def test_panda_detects_delay_without_success_drop(tmp_path):
+    pytest.importorskip("mujoco")
+    nominal = load_config(ROOT / "configs/panda_nominal.yaml")
+    delayed = load_config(ROOT / "configs/panda_delay.yaml")
+    for config in (nominal, delayed):
+        config.environment.model_path = str(MODEL)
+        config.episodes = 1
+    baseline = run_evaluation(nominal, tmp_path / "baseline")
+    candidate = run_evaluation(delayed, tmp_path / "candidate")
+    assert baseline.summary.successes == candidate.summary.successes == 1
+    comparison = compare_runs(baseline.run_dir, candidate.run_dir)
+    assert comparison.success_rate_delta == 0
+    assert comparison.mean_steps_delta > 50
+    assert not comparison.gate_passed
+
+
+def test_panda_legacy_step_metric_is_horizon():
+    config = ExperimentConfig.model_validate({
+        "name": "legacy",
+        "environment": {"name": "panda_reach"},
+        "policy": {"name": "panda_reach_ik"},
+    })
+    assert config.environment.step_metric == "horizon"
