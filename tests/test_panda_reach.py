@@ -90,3 +90,6 @@ def test_panda_feedback_uses_same_seed_and_target():
     assert original["peak_joint_correction_rad"] == 0.0
     assert 0.0 < feedback["peak_joint_correction_rad"] <= 0.25
     assert feedback == repeated
+    assert not original["passed"]
+    assert feedback["passed"]
+    assert feedback["final_position_error_m"] < original["final_position_error_m"]
