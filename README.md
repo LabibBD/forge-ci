@@ -136,6 +136,27 @@ To view a nominal trial:
 python scripts/panda_reach_probe.py --model mujoco_menagerie/franka_emika_panda/scene.xml --view
 ```
 
+### Expanded Panda disturbance sensitivity study
+
+After installing the pinned model as described above, run:
+
+```bash
+python scripts/panda_sensitivity.py --episodes 20 --seed 1000
+# Use the unique evidence directory printed by the script:
+python -m pip install matplotlib
+python scripts/plot_panda_sensitivity.py runs/panda-sensitivity/STUDY_DIRECTORY
+```
+
+This evaluates 19 conditions (nominal and six levels each of joint-1 command
+bias, command delay, and command noise) over 20 matched seeds per condition.
+It saves standard FORGE-CI episode artifacts and comparisons, study JSON/CSV,
+and environment provenance. The plotting script reads these measured results.
+A reported first failing tested level is a **discrete sensitivity result**,
+not a certified or continuous robustness boundary. Nonmonotonic outcomes
+remain visible, and conclusions about relative regressions require a valid
+nominal baseline. Only a local family of reaching targets is sampled;
+the study does not characterize the entire Panda workspace.
+
 ## CI and verification
 
 The workflow in `.github/workflows/ci.yml` runs automated checks, end-to-end regression detection, MuJoCo runs, failure classification, boundary discovery, six-dimensional robustness envelope verification, and HTML report assertions.
