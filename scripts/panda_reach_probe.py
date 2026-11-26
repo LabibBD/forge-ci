@@ -12,6 +12,7 @@ def main():
     parser.add_argument("--model", type=Path, required=True)
     parser.add_argument("--view", action="store_true")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--feedback-gain", type=float, default=0.0)
     parser.add_argument("--bias", type=float, default=0.0)
     parser.add_argument("--delay", type=int, default=0)
     parser.add_argument("--noise", type=float, default=0.0)
@@ -20,6 +21,7 @@ def main():
         args.model,
         seed=args.seed,
         view=args.view,
+        cartesian_feedback_gain=args.feedback_gain,
         command_bias_rad=args.bias,
         command_delay_steps=args.delay,
         command_noise_std_rad=args.noise,

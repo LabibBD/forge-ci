@@ -151,6 +151,7 @@ class PandaReachPolicyConfig(BaseModel):
     """Position-only IK with an optional degraded command channel."""
 
     name: Literal["panda_reach_ik"] = "panda_reach_ik"
+    cartesian_feedback_gain: float = Field(default=0.0, ge=0.0, le=0.3)
     command_bias_rad: float = Field(default=0.0, ge=-0.5, le=0.5)
     command_delay_steps: int = Field(default=0, ge=0, le=2000)
     command_noise_std_rad: float = Field(default=0.0, ge=0.0, le=0.2)

@@ -157,6 +157,28 @@ remain visible, and conclusions about relative regressions require a valid
 nominal baseline. Only a local family of reaching targets is sampled;
 the study does not characterize the entire Panda workspace.
 
+### Cartesian feedback controller
+
+The original position-only IK controller is retained as the default. An
+optional bounded Cartesian correction loop updates joint targets at 50 Hz
+after the reference trajectory, using simulated tool position and the
+Jacobian. It does not receive the injected command bias, delay or noise.
+
+```bash
+python scripts/panda_feedback_study.py --episodes 5 --seed 2000 --gain 0.12
+python scripts/panda_feedback_study.py --episodes 20 --seed 3000 --gain 0.12 --extended
+```
+
+The second command includes delay and noise conditions. Both controllers
+use matched seeds and faults. The original five-seed local bias study
+showed 5/25 successes for the original and 25/25 for feedback, including
+the nominal condition; the feedback controller took 224 ms longer to
+settle nominally, failing the unchanged 100 ms relative regression budget.
+Printed final errors of 0.000 mm are rounded, not exact zeros.
+These are simulation results for a local target family with ideal
+state feedback; they do not establish hardware performance or general
+robustness. The expanded comparison remains to be evaluated.
+
 ## CI and verification
 
 The workflow in `.github/workflows/ci.yml` runs automated checks, end-to-end regression detection, MuJoCo runs, failure classification, boundary discovery, six-dimensional robustness envelope verification, and HTML report assertions.
