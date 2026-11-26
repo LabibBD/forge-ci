@@ -9,6 +9,7 @@ from statistics import fmean
 from tempfile import mkdtemp
 
 import mujoco
+import numpy as np
 
 from forge_ci.comparison import compare_runs
 from forge_ci.config import ExperimentConfig, load_config
@@ -22,6 +23,7 @@ def main():
     parser.add_argument("--episodes", type=int, default=5)
     parser.add_argument("--seed", type=int, default=2000)
     parser.add_argument("--gain", type=float, default=0.12)
+    parser.add_argument("--extended", action="store_true", help="Include delay and noise cases.")
     parser.add_argument("--output-root", type=Path, default=Path("runs/panda-feedback"))
     args = parser.parse_args()
     if args.episodes < 1 or args.seed < 0 or not 0 < args.gain <= 0.3:
@@ -31,10 +33,16 @@ def main():
     base.episodes = args.episodes
     args.output_root.mkdir(parents=True, exist_ok=True)
     root = Path(mkdtemp(prefix="study-", dir=args.output_root))
+    cases = [(f"bias-{b:g}", b, 0, 0.0) for b in BIAS_LEVELS]
+    if args.extended:
+        cases += [(f"delay-{d}", 0.0, d, 0.0) for d in (50, 150, 250)]
+        cases += [(f"noise-{n:g}", 0.0, 0, n) for n in (0.002, 0.005, 0.02)]
     provenance = {
         "commit": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
         "model_revision": base.environment.model_revision,
         "mujoco_version": mujoco.__version__,
+        "numpy_version": np.__version__,
+        "conditions": cases,
         "python_version": platform.python_version(),
         "seed": args.seed,
         "episodes_per_condition": args.episodes,
@@ -45,13 +53,15 @@ def main():
     (root / "provenance.json").write_text(json.dumps(provenance, indent=2) + "\n")
     print(f"Evidence directory: {root}", flush=True)
     results = []
-    for bias in BIAS_LEVELS:
+    for scenario, bias, delay, noise in cases:
         baseline = None
         baseline_targets = None
         for label, gain in [("original", 0.0), ("feedback", args.gain)]:
             payload = base.model_dump(mode="python")
-            payload["name"] = f"panda-{label}-bias-{bias}"
+            payload["name"] = f"panda-{label}-{scenario}"
             payload["policy"]["command_bias_rad"] = bias
+            payload["policy"]["command_delay_steps"] = delay
+            payload["policy"]["command_noise_std_rad"] = noise
             payload["policy"]["cartesian_feedback_gain"] = gain
             config = ExperimentConfig.model_validate(payload)
             run = run_evaluation(config, root / "evaluations")
@@ -79,7 +89,10 @@ def main():
                 comparison = compare_runs(baseline.run_dir, run.run_dir)
             entry = {
                 "controller": label,
+                "scenario": scenario,
                 "bias_rad": bias,
+                "delay_steps": delay,
+                "noise_std_rad": noise,
                 "episodes": len(episodes),
                 "successes": run.summary.successes,
                 "success_rate": run.summary.success_rate,
@@ -94,9 +107,9 @@ def main():
             }
             results.append(entry)
             print(
-                f"bias {bias:.3f} | {label:8} | "
+                f"{scenario:16} | {label:8} | "
                 f"{entry['successes']}/{entry['episodes']} success | "
-                f"{entry['mean_final_error_mm']:.3f} mm | "
+                f"{entry['mean_final_error_mm']:.6g} mm | "
                 f"{entry['mean_completion_steps']:.1f} steps | "
                 f"relative gate: {entry['relative_gate_passed']}",
                 flush=True,
