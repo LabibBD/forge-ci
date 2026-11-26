@@ -93,3 +93,23 @@ def test_panda_feedback_uses_same_seed_and_target():
     assert not original["passed"]
     assert feedback["passed"]
     assert feedback["final_position_error_m"] < original["final_position_error_m"]
+
+
+@pytest.mark.skipif(not MODEL.exists(), reason="External pinned Menagerie model not installed")
+def test_panda_final_state_observer_preserves_numerical_result():
+    pytest.importorskip("mujoco")
+    from forge_ci.simulators.panda_reach import run_panda_episode
+
+    observed = []
+
+    def capture(model, data, target, tool):
+        observed.append((data.time, target.tolist(), tool.tolist()))
+
+    expected = run_panda_episode(MODEL, seed=42)
+    actual = run_panda_episode(MODEL, seed=42, final_state_callback=capture)
+    assert actual == expected
+    assert observed == [(
+        actual["simulation_seconds"],
+        actual["target_xyz_m"],
+        actual["final_tool_xyz_m"],
+    )]
