@@ -7,3 +7,6 @@ dist/
 build/
 *.egg-info/
 runs/
+
+# External simulation assets, checked out separately at a pinned revision.
+mujoco_menagerie/

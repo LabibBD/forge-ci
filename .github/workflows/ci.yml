@@ -37,6 +37,15 @@ jobs:
       - name: Install FORGE-CI
         run: python -m pip install -e ".[dev,sim]"
 
+      - name: Check out pinned Panda model
+        uses: actions/checkout@v7
+        with:
+          repository: google-deepmind/mujoco_menagerie
+          ref: eea4c7431b63da8278b0ff31638e0b0e941cec0e
+          path: mujoco_menagerie
+          sparse-checkout: franka_emika_panda
+          persist-credentials: false
+
       - name: Run tests and linting
         run: ./scripts/check.sh
 
@@ -569,6 +578,9 @@ jobs:
 
           echo "Showcase artifact generated: $report_path"
 
+      - name: Generate Panda evaluation artifacts
+        run: bash scripts/panda_showcase.sh runs/ci-panda
+
       - name: Upload evaluation artifacts
         if: always()
         uses: actions/upload-artifact@v7
@@ -584,5 +596,6 @@ jobs:
             runs/ci-envelope/
             runs/ci-multidimensional-envelope/
             runs/ci-showcase/
+            runs/ci-panda/
           if-no-files-found: ignore
           retention-days: 14

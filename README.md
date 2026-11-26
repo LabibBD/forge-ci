@@ -99,6 +99,43 @@ forgeci render-report PATH_TO_ENVELOPE_RUN
 # Writes robustness_report.html and report_data.json
 ```
 
+## Franka Panda reaching experiment
+
+The articulated position-only reaching adapter uses the external
+[MuJoCo Menagerie Panda model](https://github.com/google-deepmind/mujoco_menagerie/tree/eea4c7431b63da8278b0ff31638e0b0e941cec0e/franka_emika_panda)
+at a pinned revision. Model assets are not redistributed by FORGE-CI.
+From the repository root, install the simulator extra and check out the model:
+
+```bash
+git clone --no-checkout --filter=blob:none https://github.com/google-deepmind/mujoco_menagerie.git
+git -C mujoco_menagerie sparse-checkout init --cone
+git -C mujoco_menagerie sparse-checkout set franka_emika_panda
+git -C mujoco_menagerie checkout --detach eea4c7431b63da8278b0ff31638e0b0e941cec0e
+python -m pip install -e ".[dev,sim]"
+bash scripts/panda_showcase.sh
+```
+
+The four cases use the same five seeds and Cartesian targets, with nominal,
+first-joint command bias, command delay, and command noise conditions.
+The experiment observes each episode for six simulated seconds.
+With `step_metric: settling_or_horizon`, successful episodes report the
+first step of the final uninterrupted interval within position and velocity
+tolerances after the commanded trajectory ends; failures report the full
+observation horizon. The raw simulated step count is retained in diagnostics.
+The comparison permits a 50-step mean increase (100 ms at the 2 ms timestep).
+Legacy Panda configs without the metric field retain horizon semantics and
+cannot be compared directly against the new configs.
+
+This is a simulated position-only IK and joint-position control experiment,
+not a learned policy, full-pose control, or hardware validation.
+The existing slider-specific robustness boundary search is unchanged.
+
+To view a nominal trial:
+
+```bash
+python scripts/panda_reach_probe.py --model mujoco_menagerie/franka_emika_panda/scene.xml --view
+```
+
 ## CI and verification
 
 The workflow in `.github/workflows/ci.yml` runs automated checks, end-to-end regression detection, MuJoCo runs, failure classification, boundary discovery, six-dimensional robustness envelope verification, and HTML report assertions.
