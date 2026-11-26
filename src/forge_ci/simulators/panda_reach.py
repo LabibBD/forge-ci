@@ -24,6 +24,7 @@ def run_panda_episode(
     duration_s: float = 6.0,
     position_tolerance_m: float = 0.01,
     speed_tolerance_m_s: float = 0.02,
+    cartesian_feedback_gain: float = 0.0,
     command_bias_rad: float = 0.0,
     command_delay_steps: int = 0,
     command_noise_std_rad: float = 0.0,
@@ -31,6 +32,8 @@ def run_panda_episode(
     """Evaluate the same target distribution with optional command-channel faults."""
     if duration_s < 2.0 or command_delay_steps < 0 or command_noise_std_rad < 0:
         raise ValueError("Invalid duration, delay or command noise.")
+    if not 0.0 <= cartesian_feedback_gain <= 0.3:
+        raise ValueError("Cartesian feedback gain must be between 0 and 0.3.")
     model = mujoco.MjModel.from_xml_path(str(model_path.resolve()))
     data = mujoco.MjData(model)
     joint_ids = [
@@ -123,6 +126,9 @@ def run_panda_episode(
         dt = model.opt.timestep
         steps = int(np.ceil(duration_s / dt))
         delayed = deque([initial_q.copy() for _ in range(command_delay_steps)])
+        correction = np.zeros(7)
+        feedback_period = max(1, round(0.02 / dt))
+        peak_correction = 0.0
         settling_step = None
         peak_error = 0.0
         error_sum = 0.0
@@ -131,7 +137,26 @@ def run_panda_episode(
                 raise RuntimeError("Viewer closed before the trial finished")
             fraction = min((step + 1) * dt / 2.0, 1.0)
             blend = fraction * fraction * (3.0 - 2.0 * fraction)
-            requested = initial_q + blend * (command - initial_q)
+            # Correct measured tool position after the nominal trajectory.
+            # The controller never receives the injected fault or noise values.
+            if (
+                cartesian_feedback_gain > 0.0
+                and fraction >= 1.0
+                and step % feedback_period == 0
+            ):
+                tool_now = tip(data)
+                mujoco.mj_jac(model, data, jacp, jacr, tool_now, hand)
+                jac = jacp[:, dofs]
+                delta = jac.T @ np.linalg.solve(
+                    jac @ jac.T + 0.05**2 * np.eye(3), target - tool_now
+                )
+                correction = np.clip(
+                    correction + np.clip(cartesian_feedback_gain * delta, -0.005, 0.005),
+                    -0.25,
+                    0.25,
+                )
+                peak_correction = max(peak_correction, float(np.max(np.abs(correction))))
+            requested = initial_q + blend * (command - initial_q) + correction
             # Bias only the first arm joint; delay/noise affect all seven commands.
             requested[0] += command_bias_rad * blend
             if command_noise_std_rad:
@@ -176,6 +201,8 @@ def run_panda_episode(
             "steps": steps,
             "settling_step": settling_step,
             "timestep_s": float(dt),
+            "cartesian_feedback_gain": cartesian_feedback_gain,
+            "peak_joint_correction_rad": peak_correction,
             "command_bias_rad": command_bias_rad,
             "command_delay_steps": command_delay_steps,
             "command_noise_std_rad": command_noise_std_rad,
