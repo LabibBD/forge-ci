@@ -72,3 +72,21 @@ def test_panda_legacy_step_metric_is_horizon():
         "policy": {"name": "panda_reach_ik"},
     })
     assert config.environment.step_metric == "horizon"
+
+
+@pytest.mark.skipif(not MODEL.exists(), reason="External pinned Menagerie model not installed")
+def test_panda_feedback_uses_same_seed_and_target():
+    pytest.importorskip("mujoco")
+    from forge_ci.simulators.panda_reach import run_panda_episode
+
+    original = run_panda_episode(MODEL, seed=42, command_bias_rad=0.04)
+    feedback = run_panda_episode(
+        MODEL, seed=42, command_bias_rad=0.04, cartesian_feedback_gain=0.12
+    )
+    repeated = run_panda_episode(
+        MODEL, seed=42, command_bias_rad=0.04, cartesian_feedback_gain=0.12
+    )
+    assert original["target_xyz_m"] == feedback["target_xyz_m"]
+    assert original["peak_joint_correction_rad"] == 0.0
+    assert 0.0 < feedback["peak_joint_correction_rad"] <= 0.25
+    assert feedback == repeated
