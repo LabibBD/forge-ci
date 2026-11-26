@@ -53,6 +53,9 @@ def main():
             ax.grid(alpha=0.2)
             if metric == "success_rate":
                 ax.set_ylim(-5, 105)
+            if metric == "mean_final_error_mm":
+                ax.ticklabel_format(axis="y", style="plain", useOffset=False)
+                ax.set_ylim(0, max(12.0, max(ys) * 1.12))
             if metric == "mean_completion_steps":
                 limit = provenance["base_config"]["gate"]["max_mean_steps_increase"]
                 ax.axhline(nominal[metric] + limit, linestyle="--", linewidth=0.8,
