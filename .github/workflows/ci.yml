@@ -581,6 +581,9 @@ jobs:
       - name: Generate Panda evaluation artifacts
         run: bash scripts/panda_showcase.sh runs/ci-panda
 
+      - name: Smoke-test Panda sensitivity study
+        run: python scripts/panda_sensitivity.py --episodes 1 --seed 42 --output-root runs/ci-panda-study
+
       - name: Upload evaluation artifacts
         if: always()
         uses: actions/upload-artifact@v7
@@ -597,5 +600,6 @@ jobs:
             runs/ci-multidimensional-envelope/
             runs/ci-showcase/
             runs/ci-panda/
+            runs/ci-panda-study/
           if-no-files-found: ignore
           retention-days: 14
