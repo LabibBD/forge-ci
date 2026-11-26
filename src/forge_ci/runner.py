@@ -271,6 +271,7 @@ def _run_panda_episode(config: ExperimentConfig, episode: int) -> EpisodeResult:
         duration_s=env.duration_s,
         position_tolerance_m=env.position_tolerance_m,
         speed_tolerance_m_s=env.speed_tolerance_m_s,
+        cartesian_feedback_gain=policy.cartesian_feedback_gain,
         command_bias_rad=policy.command_bias_rad,
         command_delay_steps=policy.command_delay_steps,
         command_noise_std_rad=policy.command_noise_std_rad,
@@ -283,6 +284,7 @@ def _run_panda_episode(config: ExperimentConfig, episode: int) -> EpisodeResult:
         "target_displacement_m": result["target_displacement_m"],
         "simulation_seconds": result["simulation_seconds"],
         "simulation_steps": result["steps"],
+        "peak_joint_correction_rad": result["peak_joint_correction_rad"],
         "timestep_s": result["timestep_s"],
     }
     for axis, coordinate in zip("xyz", result["target_xyz_m"], strict=True):
@@ -314,6 +316,7 @@ def _run_panda_episode(config: ExperimentConfig, episode: int) -> EpisodeResult:
         final_position=result["final_position_error_m"],
         final_velocity=result["final_tool_speed_m_s"],
         failure_reason=None if result["passed"] else "target_not_reached",
+        policy_parameters={"cartesian_feedback_gain": policy.cartesian_feedback_gain},
         disturbance_parameters={
             "command_bias_rad": policy.command_bias_rad,
             "command_delay_steps": policy.command_delay_steps,
