@@ -584,6 +584,9 @@ jobs:
       - name: Smoke-test Panda sensitivity study
         run: python scripts/panda_sensitivity.py --episodes 1 --seed 42 --output-root runs/ci-panda-study
 
+      - name: Smoke-test Panda feedback comparison
+        run: python scripts/panda_feedback_study.py --episodes 1 --seed 42 --extended --output-root runs/ci-panda-feedback
+
       - name: Upload evaluation artifacts
         if: always()
         uses: actions/upload-artifact@v7
@@ -601,5 +604,6 @@ jobs:
             runs/ci-showcase/
             runs/ci-panda/
             runs/ci-panda-study/
+            runs/ci-panda-feedback/
           if-no-files-found: ignore
           retention-days: 14
