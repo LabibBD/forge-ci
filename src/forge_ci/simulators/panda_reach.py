@@ -28,6 +28,7 @@ def run_panda_episode(
     command_bias_rad: float = 0.0,
     command_delay_steps: int = 0,
     command_noise_std_rad: float = 0.0,
+    final_state_callback=None,
 ) -> dict:
     """Evaluate the same target distribution with optional command-channel faults."""
     if duration_s < 2.0 or command_delay_steps < 0 or command_noise_std_rad < 0:
@@ -221,6 +222,8 @@ def run_panda_episode(
             "speed_tolerance_m_s": speed_tolerance_m_s,
             "passed": bool(passed),
         }
+        if final_state_callback is not None:
+            final_state_callback(model, data, target.copy(), final_tip.copy())
         if viewer is not None:
             viewer.sync()
             print("Trial finished. Close the viewer to exit.", flush=True)
